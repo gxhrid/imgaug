@@ -17,8 +17,6 @@ import matplotlib
 matplotlib.use('Agg')  # fix execution of tests involving matplotlib on travis
 import numpy as np
 
-import PIL.Image
-
 import imgaug as ia
 from imgaug import augmenters as iaa
 from imgaug import random as iarandom
