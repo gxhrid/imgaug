@@ -11,12 +11,10 @@ The interfaces of the wrapper functions are identical to the
 `imagecorruptions` functions, with the only difference of also supporting
 `seed` parameters.
 
-Note that to ensure identical outputs the implemented functions always wrap
-functions from `imagecorruptions`, even when faster and more robust
-alternatives exist in `imgaug`.
-
-* Added module `imgaug.augmenters.imgcorrupt`.
-* Added the following functions to module `imgaug.augmenters.imgcorrupt`:
+* Added module `imgaug.augmenters.imgcorruptlike`. The `like` signals that
+  the augmentation functions do not *have* to wrap `imagecorruptions`
+  internally. They merely have to produce the same outputs.
+* Added the following functions to module `imgaug.augmenters.imgcorruptlike`:
     * `apply_gaussian_noise()`
     * `apply_shot_noise()`
     * `apply_impulse_noise()`
@@ -35,12 +33,13 @@ alternatives exist in `imgaug`.
     * `apply_jpeg_compression()`
     * `apply_pixelate()`
     * `apply_elastic_transform()`
-* Added function `imgaug.augmenters.imgcorrupt.get_corruption_names(subset)`.
+* Added function
+  `imgaug.augmenters.imgcorruptlike.get_corruption_names(subset)`.
   Similar to `imagecorruptions.get_corruption_names(subset)`, but returns a
   tuple
   `(list of corruption method names, list of corruption method functions)`,
   instead of only the names.
-* Added the following augmenters to module `imgaug.augmenters.imgcorrupt`:
+* Added the following augmenters to module `imgaug.augmenters.imgcorruptlike`:
     * `GaussianNoise`
     * `ShotNoise`
     * `ImpulseNoise`

@@ -40,13 +40,14 @@ class Test_get_imgcorrupt_subset(unittest.TestCase):
         subset_names = ["common", "validation", "all"]
         for subset in subset_names:
             with self.subTest(subset=subset):
-                func_names, funcs = iaa.imgcorrupt.get_corruption_names(subset)
+                func_names, funcs = iaa.imgcorruptlike.get_corruption_names(
+                    subset)
                 func_names_exp = imagecorruptions.get_corruption_names(subset)
 
                 assert func_names == func_names_exp
                 for func_name, func in zip(func_names, funcs):
                     assert getattr(
-                        iaa.imgcorrupt, "apply_%s" % (func_name,)
+                        iaa.imgcorruptlike, "apply_%s" % (func_name,)
                     ) is func
 
     @unittest.skipUnless(SUPPORTS_LIBRARY,
@@ -54,7 +55,7 @@ class Test_get_imgcorrupt_subset(unittest.TestCase):
     def test_subset_functions(self):
         subset_names = ["common", "validation", "all"]
         for subset in subset_names:
-            func_names, funcs = iaa.imgcorrupt.get_corruption_names(subset)
+            func_names, funcs = iaa.imgcorruptlike.get_corruption_names(subset)
             image = np.mod(
                 np.arange(32*32*3), 256
             ).reshape((32, 32, 3)).astype(np.uint8)
@@ -141,7 +142,7 @@ class _CompareFuncWithImageCorruptions(unittest.TestCase):
     def _generate_augmented_images(cls, fname, image_imgaug, image_imgcor,
                                    severity, seed):
         func_imgaug = getattr(
-            iaa.imgcorrupt,
+            iaa.imgcorruptlike,
             "apply_%s" % (fname,))
         func_imagecor = functools.partial(corrupt, corruption_name=fname)
 
@@ -163,22 +164,22 @@ class _CompareFuncWithImageCorruptions(unittest.TestCase):
 @unittest.skipUnless(SUPPORTS_LIBRARY,
                      "imagecorruptions can only be tested for python 3.5+")
 class Test_apply_functions(_CompareFuncWithImageCorruptions):
-    def test_apply_imgcorrupt_gaussian_noise(self):
+    def test_apply_gaussian_noise(self):
         self._test_by_comparison_with_imagecorruptions("gaussian_noise")
 
-    def test_apply_imgcorrupt_shot_noise(self):
+    def test_apply_shot_noise(self):
         self._test_by_comparison_with_imagecorruptions("shot_noise")
 
-    def test_apply_imgcorrupt_impulse_noise(self):
+    def test_apply_impulse_noise(self):
         self._test_by_comparison_with_imagecorruptions("impulse_noise")
 
-    def test_apply_imgcorrupt_speckle_noise(self):
+    def test_apply_speckle_noise(self):
         self._test_by_comparison_with_imagecorruptions("speckle_noise")
 
-    def test_apply_imgcorrupt_gaussian_blur(self):
+    def test_apply_gaussian_blur(self):
         self._test_by_comparison_with_imagecorruptions("gaussian_blur")
 
-    def test_apply_imgcorrupt_glass_blur(self):
+    def test_apply_glass_blur(self):
         # glass_blur() is extremely slow, so we run only a reduced set
         # of tests here
         self._test_by_comparison_with_imagecorruptions(
@@ -187,55 +188,55 @@ class Test_apply_functions(_CompareFuncWithImageCorruptions):
             severities=[3],
             seeds=[1])
 
-    def test_apply_imgcorrupt_defocus_blur(self):
+    def test_apply_defocus_blur(self):
         self._test_by_comparison_with_imagecorruptions(
             "defocus_blur")
 
-    def test_apply_imgcorrupt_motion_blur(self):
+    def test_apply_motion_blur(self):
         self._test_by_comparison_with_imagecorruptions(
             "motion_blur")
 
-    def test_apply_imgcorrupt_zoom_blur(self):
+    def test_apply_zoom_blur(self):
         self._test_by_comparison_with_imagecorruptions(
             "zoom_blur")
 
-    def test_apply_imgcorrupt_fog(self):
+    def test_apply_fog(self):
         self._test_by_comparison_with_imagecorruptions(
             "fog")
 
-    def test_apply_imgcorrupt_frost(self):
+    def test_apply_frost(self):
         self._test_by_comparison_with_imagecorruptions(
             "frost",
             severities=[1, 5],
             seeds=[1, 5, 10])
 
-    def test_apply_imgcorrupt_snow(self):
+    def test_apply_snow(self):
         self._test_by_comparison_with_imagecorruptions(
             "snow")
 
-    def test_apply_imgcorrupt_spatter(self):
+    def test_apply_spatter(self):
         self._test_by_comparison_with_imagecorruptions(
             "spatter")
 
-    def test_apply_imgcorrupt_contrast(self):
+    def test_apply_contrast(self):
         self._test_by_comparison_with_imagecorruptions("contrast")
 
-    def test_apply_imgcorrupt_brightness(self):
+    def test_apply_brightness(self):
         self._test_by_comparison_with_imagecorruptions("brightness")
 
-    def test_apply_imgcorrupt_saturate(self):
+    def test_apply_saturate(self):
         self._test_by_comparison_with_imagecorruptions(
             "saturate")
 
-    def test_apply_imgcorrupt_jpeg_compression(self):
+    def test_apply_jpeg_compression(self):
         self._test_by_comparison_with_imagecorruptions(
             "jpeg_compression")
 
-    def test_apply_imgcorrupt_pixelate(self):
+    def test_apply_pixelate(self):
         self._test_by_comparison_with_imagecorruptions(
             "pixelate")
 
-    def test_apply_imgcorrupt_elastic_transform(self):
+    def test_apply_elastic_transform(self):
         self._test_by_comparison_with_imagecorruptions(
             "elastic_transform")
 
@@ -243,10 +244,11 @@ class Test_apply_functions(_CompareFuncWithImageCorruptions):
 @unittest.skipUnless(SUPPORTS_LIBRARY,
                      "imagecorruptions can only be tested for python 3.5+")
 class TestAugmenters(unittest.TestCase):
-    def _test_augmenter(self, augmenter_name, func_expected,
+    @classmethod
+    def _test_augmenter(cls, augmenter_name, func_expected,
                         dependent_on_seed):
         severity = 5
-        aug_cls = getattr(iaa.imgcorrupt, augmenter_name)
+        aug_cls = getattr(iaa.imgcorruptlike, augmenter_name)
         image = np.mod(
             np.arange(32*32*3), 256
         ).reshape((32, 32, 3)).astype(np.uint8)
@@ -280,96 +282,95 @@ class TestAugmenters(unittest.TestCase):
 
     def test_gaussian_noise(self):
         self._test_augmenter("GaussianNoise",
-                             iaa.imgcorrupt.apply_gaussian_noise,
+                             iaa.imgcorruptlike.apply_gaussian_noise,
                              True)
 
     def test_shot_noise(self):
         self._test_augmenter("ShotNoise",
-                             iaa.imgcorrupt.apply_shot_noise,
+                             iaa.imgcorruptlike.apply_shot_noise,
                              True)
 
     def test_impulse_noise(self):
         self._test_augmenter("ImpulseNoise",
-                             iaa.imgcorrupt.apply_impulse_noise,
+                             iaa.imgcorruptlike.apply_impulse_noise,
                              True)
 
     def test_speckle_noise(self):
         self._test_augmenter("SpeckleNoise",
-                             iaa.imgcorrupt.apply_speckle_noise,
+                             iaa.imgcorruptlike.apply_speckle_noise,
                              True)
 
     def test_gaussian_blur(self):
         self._test_augmenter("GaussianBlur",
-                             iaa.imgcorrupt.apply_gaussian_blur,
+                             iaa.imgcorruptlike.apply_gaussian_blur,
                              False)
 
     def test_glass_blur(self):
         self._test_augmenter("GlassBlur",
-                             iaa.imgcorrupt.apply_glass_blur,
+                             iaa.imgcorruptlike.apply_glass_blur,
                              False)
 
     def test_defocus_blur(self):
         self._test_augmenter("DefocusBlur",
-                             iaa.imgcorrupt.apply_defocus_blur,
+                             iaa.imgcorruptlike.apply_defocus_blur,
                              False)
 
     def test_motion_blur(self):
         self._test_augmenter("MotionBlur",
-                             iaa.imgcorrupt.apply_motion_blur,
+                             iaa.imgcorruptlike.apply_motion_blur,
                              False)
 
     def test_zoom_blur(self):
         self._test_augmenter("ZoomBlur",
-                             iaa.imgcorrupt.apply_zoom_blur,
+                             iaa.imgcorruptlike.apply_zoom_blur,
                              False)
 
     def test_fog(self):
         self._test_augmenter("Fog",
-                             iaa.imgcorrupt.apply_fog,
+                             iaa.imgcorruptlike.apply_fog,
                              True)
 
     def test_frost(self):
         self._test_augmenter("Frost",
-                             iaa.imgcorrupt.apply_frost,
+                             iaa.imgcorruptlike.apply_frost,
                              False)
 
     def test_snow(self):
         self._test_augmenter("Snow",
-                             iaa.imgcorrupt.apply_snow,
+                             iaa.imgcorruptlike.apply_snow,
                              True)
 
     def test_spatter(self):
         self._test_augmenter("Spatter",
-                             iaa.imgcorrupt.apply_spatter,
+                             iaa.imgcorruptlike.apply_spatter,
                              True)
 
     def test_contrast(self):
         self._test_augmenter("Contrast",
-                             iaa.imgcorrupt.apply_contrast,
+                             iaa.imgcorruptlike.apply_contrast,
                              False)
 
     def test_brightness(self):
         self._test_augmenter("Brightness",
-                             iaa.imgcorrupt.apply_brightness,
+                             iaa.imgcorruptlike.apply_brightness,
                              False)
 
     def test_saturate(self):
         self._test_augmenter("Saturate",
-                             iaa.imgcorrupt.apply_saturate,
+                             iaa.imgcorruptlike.apply_saturate,
                              False)
 
     def test_jpeg_compression(self):
         self._test_augmenter("JpegCompression",
-                             iaa.imgcorrupt.apply_jpeg_compression,
+                             iaa.imgcorruptlike.apply_jpeg_compression,
                              False)
 
     def test_pixelate(self):
         self._test_augmenter("Pixelate",
-                             iaa.imgcorrupt.apply_pixelate,
+                             iaa.imgcorruptlike.apply_pixelate,
                              False)
 
     def test_elastic_transform(self):
         self._test_augmenter("ElasticTransform",
-                             iaa.imgcorrupt.apply_elastic_transform,
+                             iaa.imgcorruptlike.apply_elastic_transform,
                              True)
-
