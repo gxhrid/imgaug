@@ -4,6 +4,7 @@ Augmenters that blend two images with each other.
 List of augmenters:
 
     * Alpha
+    * BlendAlphaMask
     * AlphaElementwise
     * SimplexNoiseAlpha
     * FrequencyNoiseAlpha
@@ -11,13 +12,17 @@ List of augmenters:
 """
 from __future__ import print_function, division, absolute_import
 
+from abc import ABCMeta, abstractmethod
+
 import numpy as np
+import six
 import six.moves as sm
 
 import imgaug as ia
 from . import meta
 from .. import parameters as iap
 from .. import dtypes as iadt
+from .. import random as iarandom
 from ..augmentables import utils as augm_utils
 
 
@@ -187,6 +192,37 @@ def blend_alpha(image_fg, image_bg, alpha, eps=1e-2):
     if input_was_2d:
         return image_blend[:, :, 0]
     return image_blend
+
+
+# TODO add to Alpha once switched to fg/bg
+def _generate_branch_outputs(augmenter, batch, hooks, parents):
+    parents_extended = parents + [augmenter]
+
+    # Note here that the propagation hook removes columns in the batch
+    # and re-adds them afterwards. So the batch should not be copied
+    # after the `with` statement.
+    outputs_fg = batch
+    if augmenter.foreground is not None:
+        outputs_fg = outputs_fg.deepcopy()
+        with outputs_fg.propagation_hooks_ctx(augmenter, hooks, parents):
+            if augmenter.foreground is not None:
+                outputs_fg = augmenter.foreground.augment_batch(
+                    outputs_fg,
+                    parents=parents_extended,
+                    hooks=hooks
+                )
+
+    outputs_bg = batch
+    if augmenter.background is not None:
+        outputs_bg = outputs_bg.deepcopy()
+        with outputs_bg.propagation_hooks_ctx(augmenter, hooks, parents):
+            outputs_bg = augmenter.background.augment_batch(
+                outputs_bg,
+                parents=parents_extended,
+                hooks=hooks
+            )
+
+    return outputs_fg, outputs_bg
 
 
 class Alpha(meta.Augmenter):
@@ -443,6 +479,281 @@ class Alpha(meta.Augmenter):
         return pattern % (
             self.__class__.__name__, self.factor, self.per_channel, self.name,
             self.first, self.second, self.deterministic)
+
+
+# tested indirectly via AlphaElementwise for historic reasons
+class BlendAlphaMask(meta.Augmenter):
+    """
+    Alpha-blend two image sources using masks generated per image.
+
+    This augmenter queries for each image a mask generator to generate
+    a ``(H,W)`` or ``(H,W,C)`` channelwise mask ``[0.0, 1.0]``, where
+    ``H`` is the image height and ``W`` the width.
+    The mask will then be used to alpha-blend pixel- and possibly channel-wise
+    between a foreground branch of augmenters and a background branch.
+    (Both branches default to the identity operation if not provided.)
+
+    See also :class:`imgaug.augmenters.blend.Alpha`.
+
+    .. note::
+
+        It is not recommended to use ``BlendAlphaMask`` with augmenters
+        that change the geometry of images (e.g. horizontal flips, affine
+        transformations) if you *also* want to augment coordinates (e.g.
+        keypoints, polygons, ...), as it is unclear which of the two
+        coordinate results (foreground or background branch) should be used
+        as the final output coordinates after augmentation.
+
+        Currently, for keypoints the results of the
+        foreground and background branch will be mixed. That means that for
+        each coordinate the augmented result will be picked from the
+        foreground or background branch based on the average alpha mask value
+        at the corresponding spatial location.
+
+        For bounding boxes, line strings and polygons, either all objects
+        (on an image) of the foreground or all of the background branch will
+        be used, based on the average over the whole alpha mask.
+
+    dtype support::
+
+        See :func:`imgaug.augmenters.blend.blend_alpha`.
+
+    Parameters
+    ----------
+    mask_generator : IBatchwiseMaskGenerator
+        A generator that will be queried per image to generate a mask.
+
+    foreground : None or imgaug.augmenters.meta.Augmenter or iterable of imgaug.augmenters.meta.Augmenter, optional
+        Augmenter(s) that make up the foreground branch.
+        High alpha values will show this branch's results.
+
+            * If ``None``, then the input images will be reused as the output
+              of the foreground branch (i.e. identity function).
+            * If ``Augmenter``, then that augmenter will be used as the branch.
+            * If iterable of ``Augmenter``, then that iterable will be
+              converted into a ``Sequential`` and used as the augmenter.
+
+    second : None or imgaug.augmenters.meta.Augmenter or iterable of imgaug.augmenters.meta.Augmenter, optional
+        Augmenter(s) that make up the background branch.
+        Low alpha values will show this branch's results.
+
+            * If ``None``, then the input images will be reused as the output
+              of the background branch (i.e. identity function).
+            * If ``Augmenter``, then that augmenter will be used as the branch.
+            * If iterable of ``Augmenter``, then that iterable will be
+              converted into a ``Sequential`` and used as the augmenter.
+
+    name : None or str, optional
+        See :func:`imgaug.augmenters.meta.Augmenter.__init__`.
+
+    deterministic : bool, optional
+        See :func:`imgaug.augmenters.meta.Augmenter.__init__`.
+
+    random_state : None or int or imgaug.random.RNG or numpy.random.Generator or numpy.random.BitGenerator or numpy.random.SeedSequence or numpy.random.RandomState, optional
+        See :func:`imgaug.augmenters.meta.Augmenter.__init__`.
+
+    """
+
+    # Currently the mode is only used for keypoint augmentation.
+    # either or: use all keypoints from fg or all from bg branch (based
+    #   on average of the whole mask).
+    # pointwise: decide for each point whether to use the fg or bg
+    #   branch's keypoint (based on the average mask value at the point's
+    #   xy-location).
+    _MODE_EITHER_OR = "either-or"
+    _MODE_POINTWISE = "pointwise"
+    _MODES = [_MODE_POINTWISE, _MODE_EITHER_OR]
+
+    def __init__(self, mask_generator,
+                 foreground=None, background=None,
+                 name=None, deterministic=False, random_state=None):
+        super(BlendAlphaMask, self).__init__(
+            name=name,
+            deterministic=deterministic,
+            random_state=random_state
+        )
+
+        self.mask_generator = mask_generator
+
+        assert foreground is not None or background is not None, (
+            "Expected 'foreground' and/or 'background' to not be None (i.e. "
+            "at least one Augmenter), but got two None values.")
+        self.foreground = meta.handle_children_list(
+            foreground, self.name, "foreground", default=None)
+        self.background = meta.handle_children_list(
+            background, self.name, "background", default=None)
+
+        # this controls how keypoints and polygons are augmented
+        # Non-keypoints currently uses an either-or approach.
+        # Using pointwise augmentation is problematic for polygons and line
+        # strings, because the order of the points may have changed (e.g.
+        # from clockwise to counter-clockwise). For polygons, it is also
+        # overall more likely that some child-augmenter added/deleted points
+        # and we would need a polygon recoverer.
+        # Overall it seems to be the better approach to use all polygons
+        # from one branch or the other, which guarantuees their validity.
+        # TODO decide the either-or not based on the whole average mask
+        #      value but on the average mask value within the polygon's area?
+        self._coord_modes = {
+            "keypoints": self._MODE_POINTWISE,
+            "polygons": self._MODE_EITHER_OR,
+            "line_strings": self._MODE_EITHER_OR,
+            "bounding_boxes": self._MODE_EITHER_OR
+        }
+
+        self.epsilon = 1e-2
+
+    def _augment_batch(self, batch, random_state, parents, hooks):
+        batch_fg, batch_bg = _generate_branch_outputs(
+            self, batch, hooks, parents)
+
+        shapes = batch.get_rowwise_shapes()
+        nb_images = len(shapes)
+        masks = self.mask_generator.draw_masks(batch, random_state)
+
+        for i, (shape, mask) in enumerate(zip(shapes, masks)):
+            if batch.images is not None:
+                batch.images[i] = blend_alpha(batch_fg.images[i],
+                                              batch_bg.images[i],
+                                              mask, eps=self.epsilon)
+
+            if batch.heatmaps is not None:
+                arr = batch.heatmaps[i].arr_0to1
+                arr_height, arr_width = arr.shape[0:2]
+                mask_binarized = self._binarize_mask(mask,
+                                                     arr_height, arr_width)
+                batch.heatmaps[i].arr_0to1 = blend_alpha(
+                    batch_fg.heatmaps[i].arr_0to1,
+                    batch_bg.heatmaps[i].arr_0to1,
+                    mask_binarized, eps=self.epsilon)
+
+            if batch.segmentation_maps is not None:
+                arr = batch.segmentation_maps[i].arr
+                arr_height, arr_width = arr.shape[0:2]
+                mask_binarized = self._binarize_mask(mask,
+                                                     arr_height, arr_width)
+                batch.segmentation_maps[i].arr = blend_alpha(
+                    batch_fg.segmentation_maps[i].arr,
+                    batch_bg.segmentation_maps[i].arr,
+                    mask_binarized, eps=self.epsilon)
+
+            for augm_attr_name in ["keypoints", "bounding_boxes", "polygons",
+                                   "line_strings"]:
+                augm_value = getattr(batch, augm_attr_name)
+                if augm_value is not None:
+                    augm_value[i] = self._blend_coordinates(
+                        augm_value[i],
+                        getattr(batch_fg, augm_attr_name)[i],
+                        getattr(batch_bg, augm_attr_name)[i],
+                        mask,
+                        self._coord_modes[augm_attr_name]
+                    )
+
+        return batch
+
+    @classmethod
+    def _binarize_mask(cls, mask, arr_height, arr_width):
+        # Average over channels, resize to heatmap/segmap array size
+        # (+clip for cubic interpolation). We can use none-NN interpolation
+        # for segmaps here as this is just the mask and not the segmap
+        # array.
+        mask_3d = np.atleast_3d(mask)
+        mask_avg = (
+            np.average(mask_3d, axis=2) if mask_3d.shape[2] > 0 else 1.0)
+        mask_rs = ia.imresize_single_image(mask_avg, (arr_height, arr_width))
+        mask_arr = iadt.clip_(mask_rs, 0, 1.0)
+        mask_arr_binarized = (mask_arr >= 0.5)
+        return mask_arr_binarized
+
+    @classmethod
+    def _blend_coordinates(cls, cbaoi, cbaoi_first, cbaoi_second, mask_image,
+                           mode):
+        coords = augm_utils.convert_cbaois_to_kpsois(cbaoi)
+        coords_first = augm_utils.convert_cbaois_to_kpsois(cbaoi_first)
+        coords_second = augm_utils.convert_cbaois_to_kpsois(cbaoi_second)
+
+        coords = coords.to_xy_array()
+        coords_first = coords_first.to_xy_array()
+        coords_second = coords_second.to_xy_array()
+
+        h_img, w_img = mask_image.shape[0:2]
+
+        if mode == cls._MODE_POINTWISE:
+            # Augment pointwise, i.e. check for each point and its
+            # xy-location the average mask value and pick based on that
+            # either the point from the first or second branch.
+            assert len(coords_first) == len(coords_second), (
+                "Got different numbers of coordinates before/after "
+                "augmentation in AlphaElementwise. The number of "
+                "coordinates is currently not allowed to change for this "
+                "augmenter. Input contained %d coordinates, first branch "
+                "%d, second branch %d." % (
+                    len(coords), len(coords_first), len(coords_second)))
+
+            coords_aug = []
+            subgen = zip(coords, coords_first, coords_second)
+            for coord, coord_first, coord_second in subgen:
+                x_int = int(np.round(coord[0]))
+                y_int = int(np.round(coord[1]))
+                if 0 <= y_int < h_img and 0 <= x_int < w_img:
+                    alphas_i = mask_image[y_int, x_int, :]
+                    alpha = (
+                        np.average(alphas_i) if alphas_i.size > 0 else 1.0)
+                    if alpha > 0.5:
+                        coords_aug.append(coord_first)
+                    else:
+                        coords_aug.append(coord_second)
+                else:
+                    coords_aug.append((x_int, y_int))
+        else:
+            # Augment with an either-or approach over all points, i.e.
+            # based on the average of the whole mask, either all points
+            # from the first or all points from the second branch are
+            # used.
+            # Note that we ensured above that _keypoint_mode must be
+            # _MODE_EITHER_OR if it wasn't _MODE_POINTWISE.
+            mask_image_avg = (
+                np.average(mask_image) if mask_image.size > 0 else 1.0)
+            if mask_image_avg > 0.5:
+                coords_aug = coords_first
+            else:
+                coords_aug = coords_second
+
+        kpsoi_aug = ia.KeypointsOnImage.from_xy_array(
+            coords_aug, shape=cbaoi.shape)
+        return augm_utils.invert_convert_cbaois_to_kpsois_(cbaoi, kpsoi_aug)
+
+    def _to_deterministic(self):
+        aug = self.copy()
+        aug.foreground = (
+            aug.foreground.to_deterministic()
+            if aug.foreground is not None else None)
+        aug.background = (
+            aug.background.to_deterministic()
+            if aug.background is not None else None)
+        aug.deterministic = True
+        aug.random_state = self.random_state.derive_rng_()
+        return aug
+
+    def get_parameters(self):
+        """See :func:`imgaug.augmenters.meta.Augmenter.get_parameters`."""
+        return [self.mask_generator]
+
+    def get_children_lists(self):
+        """See :func:`imgaug.augmenters.meta.Augmenter.get_children_lists`."""
+        return [lst for lst in [self.foreground, self.background]
+                if lst is not None]
+
+    def __str__(self):
+        pattern = (
+            "%s("
+            "mask_generator=%s, name=%s, foreground=%s, background=%s, "
+            "deterministic=%s"
+            ")"
+        )
+        return pattern % (
+            self.__class__.__name__, self.mask_generator, self.name,
+            self.foreground, self.background, self.deterministic)
 
 
 # FIXME the output of the third example makes it look like per_channel isn't
