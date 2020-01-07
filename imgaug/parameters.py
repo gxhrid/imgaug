@@ -2782,7 +2782,7 @@ class SimplexNoise(StochasticParameter):
     """Parameter that generates simplex noise of varying resolutions.
 
     This parameter expects to sample noise for 2d planes, i.e. for
-    sizes ``(H, W)`` and will return a value in the range ``[0.0, 1.0]``
+    sizes ``(H, W, [C])`` and will return a value in the range ``[0.0, 1.0]``
     per spatial location in that plane.
 
     The noise is sampled from low resolution planes and
@@ -2872,19 +2872,29 @@ class SimplexNoise(StochasticParameter):
                 "StochasticParameter, got %s." % (type(upscale_method),))
 
     def _draw_samples(self, size, random_state):
-        assert len(size) == 2, (
-            "Expected requested noise to have shape (H, W), "
+        assert len(size) in [2, 3], (
+            "Expected requested noise to have shape (H, W) or (H, W, C), "
             "got shape %s." % (size,))
-        h, w = size
+        height, width = size[0:2]
+        nb_channels = 1 if len(size) == 2 else size[2]
+
+        channels = [self._draw_samples_hw(height, width, random_state)
+                    for _ in np.arange(nb_channels)]
+
+        if len(size) == 2:
+            return channels[0]
+        return np.stack(channels, axis=-1)
+
+    def _draw_samples_hw(self, height, width, random_state):
         iterations = 1
         rngs = random_state.duplicate(1+iterations)
         aggregation_method = "max"
         upscale_methods = self.upscale_method.draw_samples(
             (iterations,), random_state=rngs[0])
-        result = np.zeros((h, w), dtype=np.float32)
+        result = np.zeros((height, width), dtype=np.float32)
         for i in sm.xrange(iterations):
             noise_iter = self._draw_samples_iteration(
-                h, w, rngs[1+i], upscale_methods[i])
+                height, width, rngs[1+i], upscale_methods[i])
             if aggregation_method == "avg":
                 result += noise_iter
             elif aggregation_method == "min":
@@ -2903,22 +2913,22 @@ class SimplexNoise(StochasticParameter):
 
         return result
 
-    def _draw_samples_iteration(self, h, w, rng, upscale_method):
+    def _draw_samples_iteration(self, height, width, rng, upscale_method):
         opensimplex_seed = rng.generate_seed_()
 
         # we have to use int(.) here, otherwise we can get warnings about
         # value overflows in OpenSimplex L103
         generator = OpenSimplex(seed=int(opensimplex_seed))
 
-        maxlen = max(h, w)
+        maxlen = max(height, width)
         size_px_max = self.size_px_max.draw_sample(random_state=rng)
         if maxlen > size_px_max:
             downscale_factor = size_px_max / maxlen
-            h_small = int(h * downscale_factor)
-            w_small = int(w * downscale_factor)
+            h_small = int(height * downscale_factor)
+            w_small = int(width * downscale_factor)
         else:
-            h_small = h
-            w_small = w
+            h_small = height
+            w_small = width
 
         # don't go below Hx1 or 1xW
         h_small = max(h_small, 1)
@@ -2936,12 +2946,12 @@ class SimplexNoise(StochasticParameter):
         noise_0to1 = (noise + 1.0) / 2
         noise_0to1 = np.clip(noise_0to1, 0.0, 1.0)
 
-        if noise_0to1.shape != (h, w):
+        if noise_0to1.shape != (height, width):
             noise_0to1_uint8 = (noise_0to1 * 255).astype(np.uint8)
             noise_0to1_3d = np.tile(
                 noise_0to1_uint8[..., np.newaxis], (1, 1, 3))
             noise_0to1 = ia.imresize_single_image(
-                noise_0to1_3d, (h, w), interpolation=upscale_method)
+                noise_0to1_3d, (height, width), interpolation=upscale_method)
             noise_0to1 = (noise_0to1[..., 0] / 255.0).astype(np.float32)
 
         return noise_0to1
@@ -2960,8 +2970,8 @@ class FrequencyNoise(StochasticParameter):
     """Parameter to generate noise of varying frequencies.
 
     This parameter expects to sample noise for 2d planes, i.e. for
-    sizes ``(H, W)`` and will return a value in the range ``[0.0, 1.0]`` per
-    spatial location in that plane.
+    sizes ``(H, W, [C])`` and will return a value in the range ``[0.0, 1.0]``
+    per spatial location in that plane.
 
     The exponent controls the frequencies and therefore noise patterns.
     Small values (around ``-4.0``) will result in large blobs. Large values
@@ -3064,27 +3074,35 @@ class FrequencyNoise(StochasticParameter):
                 "Expected upscale_method to be string or list of strings or "
                 "StochasticParameter, got %s." % (type(upscale_method),))
 
+    # TODO this is the same as in SimplexNoise, make DRY
     def _draw_samples(self, size, random_state):
         # code here is similar to:
         #   http://www.redblobgames.com/articles/noise/2d/
         #   http://www.redblobgames.com/articles/noise/2d/2d-noise.js
 
-        assert len(size) == 2, (
-            "Expected requested noise to have shape (H, W), "
+        assert len(size) in [2, 3], (
+            "Expected requested noise to have shape (H, W) or (H, W, C), "
             "got shape %s." % (size,))
+        height, width = size[0:2]
+        nb_channels = 1 if len(size) == 2 else size[2]
 
-        rngs = random_state.duplicate(5)
+        channels = [self._draw_samples_hw(height, width, random_state)
+                    for _ in np.arange(nb_channels)]
 
-        h, w = size
-        maxlen = max(h, w)
+        if len(size) == 2:
+            return channels[0]
+        return np.stack(channels, axis=-1)
+
+    def _draw_samples_hw(self, height, width, random_state):
+        maxlen = max(height, width)
         size_px_max = self.size_px_max.draw_sample(random_state=rngs[0])
         if maxlen > size_px_max:
             downscale_factor = size_px_max / maxlen
-            h_small = int(h * downscale_factor)
-            w_small = int(w * downscale_factor)
+            h_small = int(height * downscale_factor)
+            w_small = int(width * downscale_factor)
         else:
-            h_small = h
-            w_small = w
+            h_small = height
+            w_small = width
 
         # don't go below Hx4 or 4xW
         h_small = max(h_small, 4)
