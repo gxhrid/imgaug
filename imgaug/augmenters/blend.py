@@ -533,7 +533,7 @@ class BlendAlphaMask(meta.Augmenter):
             * If iterable of ``Augmenter``, then that iterable will be
               converted into a ``Sequential`` and used as the augmenter.
 
-    second : None or imgaug.augmenters.meta.Augmenter or iterable of imgaug.augmenters.meta.Augmenter, optional
+    background : None or imgaug.augmenters.meta.Augmenter or iterable of imgaug.augmenters.meta.Augmenter, optional
         Augmenter(s) that make up the background branch.
         Low alpha values will show this branch's results.
 
