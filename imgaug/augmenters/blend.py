@@ -3,7 +3,7 @@ Augmenters that blend two images with each other.
 
 List of augmenters:
 
-    * Alpha
+    * BlendAlpha
     * BlendAlphaMask
     * BlendAlphaElementwise
     * BlendAlphaSimplexNoise
@@ -225,28 +225,47 @@ def _generate_branch_outputs(augmenter, batch, hooks, parents):
     return outputs_fg, outputs_bg
 
 
-class Alpha(meta.Augmenter):
+@ia.deprecated(alt_func="Alpha",
+               comment="Alpha is deprecated. "
+                       "Use BlendAlpha instead. "
+                       "The order of parameters is the same. "
+                       "Parameter 'first' was renamed to 'foreground'. "
+                       "Parameter 'second' was renamed to 'background'.")
+def Alpha(factor=0, first=None, second=None, per_channel=False,
+          name=None, deterministic=False, random_state=None):
+    return BlendAlpha(
+        factor=factor,
+        foreground=first,
+        background=second,
+        per_channel=per_channel,
+        name=name,
+        deterministic=deterministic,
+        random_state=random_state
+    )
+
+
+class BlendAlpha(meta.Augmenter):
     """
     Alpha-blend two image sources using an alpha/opacity value.
 
     The two image sources can be imagined as branches.
     If a source is not given, it is automatically the same as the input.
-    Let A be the first branch and B be the second branch.
-    Then the result images are defined as ``factor * A + (1-factor) * B``,
+    Let ``FG`` be the foreground branch and ``BG`` be the background branch.
+    Then the result images are defined as ``factor * FG + (1-factor) * BG``,
     where ``factor`` is an overlay factor.
 
     .. note::
 
-        It is not recommended to use ``Alpha`` with augmenters
+        It is not recommended to use ``BlendAlpha`` with augmenters
         that change the geometry of images (e.g. horizontal flips, affine
         transformations) if you *also* want to augment coordinates (e.g.
         keypoints, polygons, ...), as it is unclear which of the two
-        coordinate results (first or second branch) should be used as the
-        coordinates after augmentation.
+        coordinate results (foreground or background branch) should be used
+        as the coordinates after augmentation.
 
-        Currently, if ``factor >= 0.5`` (per image), the results of the first
-        branch are used as the new coordinates, otherwise the results of the
-        second branch.
+        Currently, if ``factor >= 0.5`` (per image), the results of the
+        foreground branch are used as the new coordinates, otherwise the
+        results of the background branch.
 
     dtype support::
 
@@ -255,9 +274,9 @@ class Alpha(meta.Augmenter):
     Parameters
     ----------
     factor : number or tuple of number or list of number or imgaug.parameters.StochasticParameter, optional
-        Weighting of the results of the first branch. Values close to ``0``
-        mean that the results from the second branch (see parameter `second`)
-        make up most of the final image.
+        Opacity of the results of the foreground branch. Values close to
+        ``0.0`` mean that the results from the background branch (see
+        parameter `background`) make up most of the final image.
 
             * If float, then that value will be used for all images.
             * If tuple ``(a, b)``, then a random value from the interval
@@ -267,20 +286,22 @@ class Alpha(meta.Augmenter):
             * If ``StochasticParameter``, then that parameter will be used to
               sample a value per image.
 
-    first : None or imgaug.augmenters.meta.Augmenter or iterable of imgaug.augmenters.meta.Augmenter, optional
-        Augmenter(s) that make up the first of the two branches.
+    foreground : None or imgaug.augmenters.meta.Augmenter or iterable of imgaug.augmenters.meta.Augmenter, optional
+        Augmenter(s) that make up the foreground branch.
+        High alpha values will show this branch's results.
 
             * If ``None``, then the input images will be reused as the output
-              of the first branch.
+              of the foreground branch.
             * If ``Augmenter``, then that augmenter will be used as the branch.
             * If iterable of ``Augmenter``, then that iterable will be
               converted into a ``Sequential`` and used as the augmenter.
 
-    second : None or imgaug.augmenters.meta.Augmenter or iterable of imgaug.augmenters.meta.Augmenter, optional
-        Augmenter(s) that make up the second of the two branches.
+    background : None or imgaug.augmenters.meta.Augmenter or iterable of imgaug.augmenters.meta.Augmenter, optional
+        Augmenter(s) that make up the background branch.
+        Low alpha values will show this branch's results.
 
             * If ``None``, then the input images will be reused as the output
-              of the second branch.
+              of the background branch.
             * If ``Augmenter``, then that augmenter will be used as the branch.
             * If iterable of ``Augmenter``, then that iterable will be
               converted into a ``Sequential`` and used as the augmenter.
@@ -303,20 +324,20 @@ class Alpha(meta.Augmenter):
     Examples
     --------
     >>> import imgaug.augmenters as iaa
-    >>> aug = iaa.Alpha(0.5, iaa.Grayscale(1.0))
+    >>> aug = iaa.BlendAlpha(0.5, iaa.Grayscale(1.0))
 
     Convert each image to pure grayscale and alpha-blend the result with the
     original image using an alpha of ``50%``, thereby removing about ``50%`` of
     all color. This is equivalent to ``iaa.Grayscale(0.5)``.
 
-    >>> aug = iaa.Alpha((0.0, 1.0), iaa.Grayscale(1.0))
+    >>> aug = iaa.BlendAlpha((0.0, 1.0), iaa.Grayscale(1.0))
 
     Same as in the previous example, but the alpha factor is sampled uniformly
     from the interval ``[0.0, 1.0]`` once per image, thereby removing a random
     fraction of all colors. This is equivalent to
     ``iaa.Grayscale((0.0, 1.0))``.
 
-    >>> aug = iaa.Alpha(
+    >>> aug = iaa.BlendAlpha(
     >>>     (0.0, 1.0),
     >>>     iaa.Affine(rotate=(-20, 20)),
     >>>     per_channel=0.5)
@@ -330,10 +351,10 @@ class Alpha(meta.Augmenter):
     rotated (factor near ``1.0``), while the green and blue channels may not
     look rotated (factors near ``0.0``).
 
-    >>> aug = iaa.Alpha(
+    >>> aug = iaa.BlendAlpha(
     >>>     (0.0, 1.0),
-    >>>     first=iaa.Add(100),
-    >>>     second=iaa.Multiply(0.2))
+    >>>     foreground=iaa.Add(100),
+    >>>     background=iaa.Multiply(0.2))
 
     Apply two branches of augmenters -- ``A`` and ``B`` -- *independently*
     to input images and alpha-blend the results of these branches using a
@@ -342,7 +363,7 @@ class Alpha(meta.Augmenter):
     uniformly from the interval ``[0.0, 1.0]`` per image. The resulting images
     contain a bit of ``A`` and a bit of ``B``.
 
-    >>> aug = iaa.Alpha([0.25, 0.75], iaa.MedianBlur(13))
+    >>> aug = iaa.BlendAlpha([0.25, 0.75], iaa.MedianBlur(13))
 
     Apply median blur to each image and alpha-blend the result with the
     original image using an alpha factor of either exactly ``0.25`` or
@@ -350,23 +371,23 @@ class Alpha(meta.Augmenter):
 
     """
 
-    # TODO rename first/second to foreground/background?
-    def __init__(self, factor=0, first=None, second=None, per_channel=False,
+    def __init__(self, factor=0, foreground=None, background=None,
+                 per_channel=False,
                  name=None, deterministic=False, random_state=None):
-        super(Alpha, self).__init__(name=name, deterministic=deterministic,
-                                    random_state=random_state)
+        super(BlendAlpha, self).__init__(
+            name=name, deterministic=deterministic, random_state=random_state)
 
         self.factor = iap.handle_continuous_param(
             factor, "factor", value_range=(0, 1.0), tuple_to_uniform=True,
             list_to_choice=True)
 
-        assert first is not None or second is not None, (
-            "Expected 'first' and/or 'second' to not be None (i.e. at least "
-            "one Augmenter), but got two None values.")
-        self.first = meta.handle_children_list(first, self.name, "first",
-                                               default=None)
-        self.second = meta.handle_children_list(second, self.name, "second",
-                                                default=None)
+        assert foreground is not None or background is not None, (
+            "Expected 'foreground' and/or 'background' to not be None (i.e. "
+            "at least one Augmenter), but got two None values.")
+        self.foreground = meta.handle_children_list(
+            foreground, self.name, "foreground", default=None)
+        self.background = meta.handle_children_list(
+            background, self.name, "background", default=None)
 
         self.per_channel = iap.handle_probability_param(per_channel,
                                                         "per_channel")
@@ -374,8 +395,8 @@ class Alpha(meta.Augmenter):
         self.epsilon = 1e-2
 
     def _augment_batch(self, batch, random_state, parents, hooks):
-        batch_first, batch_second = self._generate_branch_outputs(
-            batch, hooks, parents)
+        batch_fg, batch_bg = _generate_branch_outputs(
+            self, batch, hooks, parents)
 
         columns = batch.columns
         shapes = batch.get_rowwise_shapes()
@@ -402,12 +423,12 @@ class Alpha(meta.Augmenter):
             # compute alpha for non-image data -- average() also works with
             # scalars
             alphas_i_avg = np.average(alphas_i)
-            use_first_branch = alphas_i_avg >= 0.5
+            use_fg_branch = alphas_i_avg >= 0.5
 
             # blend images
             if batch.images is not None:
-                batch.images[i] = blend_alpha(batch_first.images[i],
-                                              batch_second.images[i],
+                batch.images[i] = blend_alpha(batch_fg.images[i],
+                                              batch_bg.images[i],
                                               alphas_i, eps=self.epsilon)
 
             # blend non-images
@@ -416,47 +437,22 @@ class Alpha(meta.Augmenter):
             #      sense.
             for column in columns:
                 if column.name != "images":
-                    batch_use = (batch_first if use_first_branch
-                                 else batch_second)
+                    batch_use = (batch_fg if use_fg_branch
+                                 else batch_bg)
                     column.value[i] = getattr(batch_use, column.attr_name)[i]
 
         return batch
 
-    def _generate_branch_outputs(self, batch, hooks, parents):
-        parents_extended = parents + [self]
-
-        # Note here that the propagation hook removes columns in the batch
-        # and re-adds them afterwards. So the batch should not be copied
-        # after the `with` statement.
-        outputs_first = batch
-        if self.first is not None:
-            outputs_first = outputs_first.deepcopy()
-            with outputs_first.propagation_hooks_ctx(self, hooks, parents):
-                if self.first is not None:
-                    outputs_first = self.first.augment_batch(
-                        outputs_first,
-                        parents=parents_extended,
-                        hooks=hooks
-                    )
-
-        outputs_second = batch
-        if self.second is not None:
-            outputs_second = outputs_second.deepcopy()
-            with outputs_second.propagation_hooks_ctx(self, hooks, parents):
-                outputs_second = self.second.augment_batch(
-                    outputs_second,
-                    parents=parents_extended,
-                    hooks=hooks
-                )
-
-        return outputs_first, outputs_second
-
     def _to_deterministic(self):
         aug = self.copy()
-        aug.first = (
-            aug.first.to_deterministic() if aug.first is not None else None)
-        aug.second = (
-            aug.second.to_deterministic() if aug.second is not None else None)
+        aug.foreground = (
+            aug.foreground.to_deterministic()
+            if aug.foreground is not None
+            else None)
+        aug.background = (
+            aug.background.to_deterministic()
+            if aug.background is not None
+            else None)
         aug.deterministic = True
         aug.random_state = self.random_state.derive_rng_()
         return aug
@@ -467,18 +463,20 @@ class Alpha(meta.Augmenter):
 
     def get_children_lists(self):
         """See :func:`imgaug.augmenters.meta.Augmenter.get_children_lists`."""
-        return [lst for lst in [self.first, self.second] if lst is not None]
+        return [lst for lst in [self.foreground, self.background]
+                if lst is not None]
 
     def __str__(self):
         pattern = (
             "%s("
-            "factor=%s, per_channel=%s, name=%s, first=%s, second=%s, "
+            "factor=%s, per_channel=%s, name=%s, "
+            "foreground=%s, background=%s, "
             "deterministic=%s"
             ")"
         )
         return pattern % (
             self.__class__.__name__, self.factor, self.per_channel, self.name,
-            self.first, self.second, self.deterministic)
+            self.foreground, self.background, self.deterministic)
 
 
 # tested indirectly via BlendAlphaElementwise for historic reasons
@@ -493,7 +491,7 @@ class BlendAlphaMask(meta.Augmenter):
     between a foreground branch of augmenters and a background branch.
     (Both branches default to the identity operation if not provided.)
 
-    See also :class:`imgaug.augmenters.blend.Alpha`.
+    See also :class:`imgaug.augmenters.blend.BlendAlpha`.
 
     .. note::
 
@@ -666,33 +664,33 @@ class BlendAlphaMask(meta.Augmenter):
         return mask_arr_binarized
 
     @classmethod
-    def _blend_coordinates(cls, cbaoi, cbaoi_first, cbaoi_second, mask_image,
+    def _blend_coordinates(cls, cbaoi, cbaoi_fg, cbaoi_bg, mask_image,
                            mode):
         coords = augm_utils.convert_cbaois_to_kpsois(cbaoi)
-        coords_first = augm_utils.convert_cbaois_to_kpsois(cbaoi_first)
-        coords_second = augm_utils.convert_cbaois_to_kpsois(cbaoi_second)
+        coords_fg = augm_utils.convert_cbaois_to_kpsois(cbaoi_fg)
+        coords_bg = augm_utils.convert_cbaois_to_kpsois(cbaoi_bg)
 
         coords = coords.to_xy_array()
-        coords_first = coords_first.to_xy_array()
-        coords_second = coords_second.to_xy_array()
+        coords_fg = coords_fg.to_xy_array()
+        coords_bg = coords_bg.to_xy_array()
 
         h_img, w_img = mask_image.shape[0:2]
 
         if mode == cls._MODE_POINTWISE:
             # Augment pointwise, i.e. check for each point and its
             # xy-location the average mask value and pick based on that
-            # either the point from the first or second branch.
-            assert len(coords_first) == len(coords_second), (
+            # either the point from the foreground or background branch.
+            assert len(coords_fg) == len(coords_bg), (
                 "Got different numbers of coordinates before/after "
                 "augmentation in BlendAlphaMask. The number of "
                 "coordinates is currently not allowed to change for this "
-                "augmenter. Input contained %d coordinates, first branch "
-                "%d, second branch %d." % (
-                    len(coords), len(coords_first), len(coords_second)))
+                "augmenter. Input contained %d coordinates, foreground "
+                "branch %d, backround branch %d." % (
+                    len(coords), len(coords_fg), len(coords_bg)))
 
             coords_aug = []
-            subgen = zip(coords, coords_first, coords_second)
-            for coord, coord_first, coord_second in subgen:
+            subgen = zip(coords, coords_fg, coords_bg)
+            for coord, coord_fg, coord_bg in subgen:
                 x_int = int(np.round(coord[0]))
                 y_int = int(np.round(coord[1]))
                 if 0 <= y_int < h_img and 0 <= x_int < w_img:
@@ -700,24 +698,24 @@ class BlendAlphaMask(meta.Augmenter):
                     alpha = (
                         np.average(alphas_i) if alphas_i.size > 0 else 1.0)
                     if alpha > 0.5:
-                        coords_aug.append(coord_first)
+                        coords_aug.append(coord_fg)
                     else:
-                        coords_aug.append(coord_second)
+                        coords_aug.append(coord_bg)
                 else:
                     coords_aug.append((x_int, y_int))
         else:
             # Augment with an either-or approach over all points, i.e.
             # based on the average of the whole mask, either all points
-            # from the first or all points from the second branch are
-            # used.
+            # from the foreground or all points from the background branch
+            # are used.
             # Note that we ensured above that _keypoint_mode must be
             # _MODE_EITHER_OR if it wasn't _MODE_POINTWISE.
             mask_image_avg = (
                 np.average(mask_image) if mask_image.size > 0 else 1.0)
             if mask_image_avg > 0.5:
-                coords_aug = coords_first
+                coords_aug = coords_fg
             else:
-                coords_aug = coords_second
+                coords_aug = coords_bg
 
         kpsoi_aug = ia.KeypointsOnImage.from_xy_array(
             coords_aug, shape=cbaoi.shape)
@@ -781,11 +779,11 @@ class BlendAlphaElementwise(BlendAlphaMask):
     """
     Alpha-blend two image sources using alpha/opacity values sampled per pixel.
 
-    This is the same as :class:`Alpha`, except that the opacity factor is
+    This is the same as :class:`BlendAlpha`, except that the opacity factor is
     sampled once per *pixel* instead of once per *image* (or a few times per
-    image, if ``Alpha.per_channel`` is set to ``True``).
+    image, if ``BlendAlpha.per_channel`` is set to ``True``).
 
-    See :class:`Alpha` for more details.
+    See :class:`BlendAlpha` for more details.
 
     This class is a wrapper around
     :class:`imgaug.augmenters.blend.BlendAlphaMask`.
@@ -858,7 +856,7 @@ class BlendAlphaElementwise(BlendAlphaMask):
     Convert each image to pure grayscale and alpha-blend the result with the
     original image using an alpha of ``50%`` for all pixels, thereby removing
     about ``50%`` of all color. This is equivalent to ``iaa.Grayscale(0.5)``.
-    This is also equivalent to ``iaa.Alpha(0.5, iaa.Grayscale(1.0))``, as
+    This is also equivalent to ``iaa.BlendAlpha(0.5, iaa.Grayscale(1.0))``, as
     the opacity has a fixed value of ``0.5`` and is hence identical for all
     pixels.
 

@@ -415,6 +415,27 @@ class Test_blend_alpha(unittest.TestCase):
 
 
 class TestAlpha(unittest.TestCase):
+    def test_deprecation_warning(self):
+        aug1 = iaa.Sequential([])
+        aug2 = iaa.Sequential([])
+
+        with warnings.catch_warnings(record=True) as caught_warnings:
+            warnings.simplefilter("always")
+
+            aug = iaa.Alpha(0.75, first=aug1, second=aug2)
+
+            assert (
+                "is deprecated"
+                in str(caught_warnings[-1].message)
+            )
+
+        assert isinstance(aug, iaa.BlendAlpha)
+        assert np.isclose(aug.factor.value, 0.75)
+        assert aug.foreground is aug1
+        assert aug.background is aug2
+
+
+class TestBlendAlpha(unittest.TestCase):
     def setUp(self):
         reseed()
 
@@ -486,7 +507,7 @@ class TestAlpha(unittest.TestCase):
         return ia.BoundingBoxesOnImage(bbs, shape=(20, 20, 3))
 
     def test_images_factor_is_1(self):
-        aug = iaa.Alpha(1, iaa.Add(10), iaa.Add(20))
+        aug = iaa.BlendAlpha(1, iaa.Add(10), iaa.Add(20))
         observed = aug.augment_image(self.image)
         expected = np.round(self.image + 10).astype(np.uint8)
         assert np.allclose(observed, expected)
@@ -494,7 +515,7 @@ class TestAlpha(unittest.TestCase):
     def test_heatmaps_factor_is_1_with_affines_and_per_channel(self):
         for per_channel in [False, True]:
             with self.subTest(per_channel=per_channel):
-                aug = iaa.Alpha(
+                aug = iaa.BlendAlpha(
                     1,
                     iaa.Affine(translate_px={"x": 1}),
                     iaa.Affine(translate_px={"x": -1}),
@@ -509,7 +530,7 @@ class TestAlpha(unittest.TestCase):
     def test_segmaps_factor_is_1_with_affines_and_per_channel(self):
         for per_channel in [False, True]:
             with self.subTest(per_channel=per_channel):
-                aug = iaa.Alpha(
+                aug = iaa.BlendAlpha(
                     1,
                     iaa.Affine(translate_px={"x": 1}),
                     iaa.Affine(translate_px={"x": -1}),
@@ -520,7 +541,7 @@ class TestAlpha(unittest.TestCase):
                                       self.segmaps_r1.get_arr())
 
     def test_images_factor_is_0(self):
-        aug = iaa.Alpha(0, iaa.Add(10), iaa.Add(20))
+        aug = iaa.BlendAlpha(0, iaa.Add(10), iaa.Add(20))
         observed = aug.augment_image(self.image)
         expected = np.round(self.image + 20).astype(np.uint8)
         assert np.allclose(observed, expected)
@@ -528,7 +549,7 @@ class TestAlpha(unittest.TestCase):
     def test_heatmaps_factor_is_0_with_affines_and_per_channel(self):
         for per_channel in [False, True]:
             with self.subTest(per_channel=per_channel):
-                aug = iaa.Alpha(
+                aug = iaa.BlendAlpha(
                     0,
                     iaa.Affine(translate_px={"x": 1}),
                     iaa.Affine(translate_px={"x": -1}),
@@ -543,7 +564,7 @@ class TestAlpha(unittest.TestCase):
     def test_segmaps_factor_is_0_with_affines_and_per_channel(self):
         for per_channel in [False, True]:
             with self.subTest(per_channel=per_channel):
-                aug = iaa.Alpha(
+                aug = iaa.BlendAlpha(
                     0,
                     iaa.Affine(translate_px={"x": 1}),
                     iaa.Affine(translate_px={"x": -1}),
@@ -554,7 +575,7 @@ class TestAlpha(unittest.TestCase):
                                       self.segmaps_l1.get_arr())
 
     def test_images_factor_is_075(self):
-        aug = iaa.Alpha(0.75, iaa.Add(10), iaa.Add(20))
+        aug = iaa.BlendAlpha(0.75, iaa.Add(10), iaa.Add(20))
         observed = aug.augment_image(self.image)
         expected = np.round(
             self.image
@@ -563,8 +584,8 @@ class TestAlpha(unittest.TestCase):
         ).astype(np.uint8)
         assert np.allclose(observed, expected)
 
-    def test_images_factor_is_075_first_branch_is_none(self):
-        aug = iaa.Alpha(0.75, None, iaa.Add(20))
+    def test_images_factor_is_075_fg_branch_is_none(self):
+        aug = iaa.BlendAlpha(0.75, None, iaa.Add(20))
         observed = aug.augment_image(self.image + 10)
         expected = np.round(
             self.image
@@ -573,8 +594,8 @@ class TestAlpha(unittest.TestCase):
         ).astype(np.uint8)
         assert np.allclose(observed, expected)
 
-    def test_images_factor_is_075_second_branch_is_none(self):
-        aug = iaa.Alpha(0.75, iaa.Add(10), None)
+    def test_images_factor_is_075_bg_branch_is_none(self):
+        aug = iaa.BlendAlpha(0.75, iaa.Add(10), None)
         observed = aug.augment_image(self.image + 10)
         expected = np.round(
             self.image
@@ -586,7 +607,7 @@ class TestAlpha(unittest.TestCase):
     def test_images_factor_is_tuple(self):
         image = np.zeros((1, 2, 1), dtype=np.uint8)
         nb_iterations = 1000
-        aug = iaa.Alpha((0.0, 1.0), iaa.Add(10), iaa.Add(110))
+        aug = iaa.BlendAlpha((0.0, 1.0), iaa.Add(10), iaa.Add(110))
         values = []
         for _ in sm.xrange(nb_iterations):
             observed = aug.augment_image(image)
@@ -606,7 +627,7 @@ class TestAlpha(unittest.TestCase):
     def test_bad_datatype_for_factor_fails(self):
         got_exception = False
         try:
-            _ = iaa.Alpha(False, iaa.Add(10), None)
+            _ = iaa.BlendAlpha(False, iaa.Add(10), None)
         except Exception as exc:
             assert "Expected " in str(exc)
             got_exception = True
@@ -614,7 +635,7 @@ class TestAlpha(unittest.TestCase):
 
     def test_images_with_per_channel_in_both_alpha_and_child(self):
         image = np.zeros((1, 1, 1000), dtype=np.uint8)
-        aug = iaa.Alpha(
+        aug = iaa.BlendAlpha(
             1.0,
             iaa.Add((0, 100), per_channel=True),
             None,
@@ -627,7 +648,7 @@ class TestAlpha(unittest.TestCase):
 
     def test_images_with_per_channel_in_alpha_and_tuple_as_factor(self):
         image = np.zeros((1, 1, 1000), dtype=np.uint8)
-        aug = iaa.Alpha(
+        aug = iaa.BlendAlpha(
             (0.0, 1.0),
             iaa.Add(100),
             None,
@@ -639,7 +660,7 @@ class TestAlpha(unittest.TestCase):
         assert np.min(observed) < 20
 
     def test_images_float_as_per_channel_tuple_as_factor_two_branches(self):
-        aug = iaa.Alpha(
+        aug = iaa.BlendAlpha(
             (0.0, 1.0),
             iaa.Add(100),
             iaa.Add(0),
@@ -661,14 +682,14 @@ class TestAlpha(unittest.TestCase):
         # bad datatype for per_channel
         got_exception = False
         try:
-            _ = iaa.Alpha(0.5, iaa.Add(10), None, per_channel="test")
+            _ = iaa.BlendAlpha(0.5, iaa.Add(10), None, per_channel="test")
         except Exception as exc:
             assert "Expected " in str(exc)
             got_exception = True
         assert got_exception
 
     def test_hooks_limiting_propagation(self):
-        aug = iaa.Alpha(0.5, iaa.Add(100), iaa.Add(50), name="AlphaTest")
+        aug = iaa.BlendAlpha(0.5, iaa.Add(100), iaa.Add(50), name="AlphaTest")
 
         def propagator(images, augmenter, parents, default):
             if "Alpha" in augmenter.name:
@@ -819,7 +840,8 @@ class TestAlpha(unittest.TestCase):
 
     @classmethod
     def _test_cba_factor_is_1(cls, augf_name, cbaoi):
-        aug = iaa.Alpha(1.0, iaa.Identity(), iaa.Affine(translate_px={"x": 1}))
+        aug = iaa.BlendAlpha(
+            1.0, iaa.Identity(), iaa.Affine(translate_px={"x": 1}))
 
         observed = getattr(aug, augf_name)([cbaoi])
 
@@ -827,7 +849,7 @@ class TestAlpha(unittest.TestCase):
 
     @classmethod
     def _test_cba_factor_is_0501(cls, augf_name, cbaoi):
-        aug = iaa.Alpha(0.501, iaa.Identity(),
+        aug = iaa.BlendAlpha(0.501, iaa.Identity(),
                         iaa.Affine(translate_px={"x": 1}))
 
         observed = getattr(aug, augf_name)([cbaoi])
@@ -836,7 +858,8 @@ class TestAlpha(unittest.TestCase):
 
     @classmethod
     def _test_cba_factor_is_0(cls, augf_name, cbaoi):
-        aug = iaa.Alpha(0.0, iaa.Identity(), iaa.Affine(translate_px={"x": 1}))
+        aug = iaa.BlendAlpha(
+            0.0, iaa.Identity(), iaa.Affine(translate_px={"x": 1}))
 
         observed = getattr(aug, augf_name)([cbaoi])
 
@@ -845,7 +868,7 @@ class TestAlpha(unittest.TestCase):
 
     @classmethod
     def _test_cba_factor_is_0499(cls, augf_name, cbaoi):
-        aug = iaa.Alpha(0.499, iaa.Identity(),
+        aug = iaa.BlendAlpha(0.499, iaa.Identity(),
                         iaa.Affine(translate_px={"x": 1}))
 
         observed = getattr(aug, augf_name)([cbaoi])
@@ -855,7 +878,7 @@ class TestAlpha(unittest.TestCase):
 
     @classmethod
     def _test_cba_factor_is_1_and_per_channel(cls, augf_name, cbaoi):
-        aug = iaa.Alpha(
+        aug = iaa.BlendAlpha(
             1.0,
             iaa.Identity(),
             iaa.Affine(translate_px={"x": 1}),
@@ -867,7 +890,7 @@ class TestAlpha(unittest.TestCase):
 
     @classmethod
     def _test_cba_factor_is_0_and_per_channel(cls, augf_name, cbaoi):
-        aug = iaa.Alpha(
+        aug = iaa.BlendAlpha(
             0.0,
             iaa.Identity(),
             iaa.Affine(translate_px={"x": 1}),
@@ -881,7 +904,7 @@ class TestAlpha(unittest.TestCase):
     @classmethod
     def _test_cba_factor_is_choice_around_050_and_per_channel(
             cls, augf_name, cbaoi):
-        aug = iaa.Alpha(
+        aug = iaa.BlendAlpha(
             iap.Choice([0.49, 0.51]),
             iaa.Identity(),
             iaa.Affine(translate_px={"x": 1}),
@@ -915,7 +938,7 @@ class TestAlpha(unittest.TestCase):
     @classmethod
     def _test_empty_cba(cls, augf_name, cbaoi):
         # empty CBAs
-        aug = iaa.Alpha(0.501, iaa.Identity(),
+        aug = iaa.BlendAlpha(0.501, iaa.Identity(),
                         iaa.Affine(translate_px={"x": 1}))
 
         observed = getattr(aug, augf_name)(cbaoi)
@@ -925,7 +948,7 @@ class TestAlpha(unittest.TestCase):
 
     @classmethod
     def _test_cba_hooks_limit_propagation(cls, augf_name, cbaoi):
-        aug = iaa.Alpha(
+        aug = iaa.BlendAlpha(
             0.0,
             iaa.Affine(translate_px={"x": 1}),
             iaa.Affine(translate_px={"y": 1}),
@@ -956,7 +979,7 @@ class TestAlpha(unittest.TestCase):
         for shape in shapes:
             with self.subTest(shape=shape):
                 image = np.full(shape, 0, dtype=np.uint8)
-                aug = iaa.Alpha(1.0, iaa.Add(1), iaa.Add(100))
+                aug = iaa.BlendAlpha(1.0, iaa.Add(1), iaa.Add(100))
 
                 image_aug = aug(image=image)
 
@@ -975,7 +998,7 @@ class TestAlpha(unittest.TestCase):
         for shape in shapes:
             with self.subTest(shape=shape):
                 image = np.full(shape, 0, dtype=np.uint8)
-                aug = iaa.Alpha(1.0, iaa.Add(1), iaa.Add(100))
+                aug = iaa.BlendAlpha(1.0, iaa.Add(1), iaa.Add(100))
 
                 image_aug = aug(image=image)
 
@@ -984,9 +1007,9 @@ class TestAlpha(unittest.TestCase):
                 assert image_aug.shape == shape
 
     def test_get_parameters(self):
-        first = iaa.Identity()
-        second = iaa.Sequential([iaa.Add(1)])
-        aug = iaa.Alpha(0.65, first, second, per_channel=1)
+        fg = iaa.Identity()
+        bg = iaa.Sequential([iaa.Add(1)])
+        aug = iaa.BlendAlpha(0.65, fg, bg, per_channel=1)
         params = aug.get_parameters()
         assert isinstance(params[0], iap.Deterministic)
         assert isinstance(params[1], iap.Deterministic)
@@ -994,14 +1017,14 @@ class TestAlpha(unittest.TestCase):
         assert params[1].value == 1
 
     def test_get_children_lists(self):
-        first = iaa.Identity()
-        second = iaa.Sequential([iaa.Add(1)])
-        aug = iaa.Alpha(0.65, first, second, per_channel=1)
+        fg = iaa.Identity()
+        bg = iaa.Sequential([iaa.Add(1)])
+        aug = iaa.BlendAlpha(0.65, fg, bg, per_channel=1)
         children_lsts = aug.get_children_lists()
         assert len(children_lsts) == 2
         assert ia.is_iterable([lst for lst in children_lsts])
-        assert first in children_lsts[0]
-        assert second == children_lsts[1]
+        assert fg in children_lsts[0]
+        assert bg == children_lsts[1]
 
     def test_to_deterministic(self):
         class _DummyAugmenter(iaa.Identity):
@@ -1015,19 +1038,19 @@ class TestAlpha(unittest.TestCase):
 
         identity1 = _DummyAugmenter()
         identity2 = _DummyAugmenter()
-        aug = iaa.Alpha(0.5, identity1, identity2)
+        aug = iaa.BlendAlpha(0.5, identity1, identity2)
 
         aug_det = aug.to_deterministic()
 
         assert aug_det.deterministic
         assert aug_det.random_state is not aug.random_state
-        assert aug_det.first.deterministic
-        assert aug_det.second.deterministic
+        assert aug_det.foreground.deterministic
+        assert aug_det.background.deterministic
         assert identity1.deterministic_called is True
         assert identity2.deterministic_called is True
 
     def test_pickleable(self):
-        aug = iaa.Alpha(
+        aug = iaa.BlendAlpha(
             (0.1, 0.9),
             iaa.Add((1, 10), random_state=1),
             iaa.Add((11, 20), random_state=2),
@@ -1213,7 +1236,7 @@ class TestBlendAlphaElementwise(unittest.TestCase):
         ).astype(np.uint8)
         assert np.allclose(observed, expected)
 
-    def test_images_factor_is_075_first_branch_is_none(self):
+    def test_images_factor_is_075_fg_branch_is_none(self):
         aug = iaa.BlendAlphaElementwise(0.75, None, iaa.Add(20))
         observed = aug.augment_image(self.image + 10)
         expected = np.round(
@@ -1221,7 +1244,7 @@ class TestBlendAlphaElementwise(unittest.TestCase):
         ).astype(np.uint8)
         assert np.allclose(observed, expected)
 
-    def test_images_factor_is_075_second_branch_is_none(self):
+    def test_images_factor_is_075_bg_branch_is_none(self):
         aug = iaa.BlendAlphaElementwise(0.75, iaa.Add(10), None)
         observed = aug.augment_image(self.image + 10)
         expected = np.round(
@@ -1359,7 +1382,7 @@ class TestBlendAlphaElementwise(unittest.TestCase):
 
     def test_keypoints_factor_is_choice_of_vals_close_050_per_channel(self):
         # TODO can this somehow be integrated into the CBA functions below?
-        aug = iaa.Alpha(
+        aug = iaa.BlendAlpha(
             iap.Choice([0.49, 0.51]),
             iaa.Identity(),
             iaa.Affine(translate_px={"x": 1}),
@@ -1368,10 +1391,10 @@ class TestBlendAlphaElementwise(unittest.TestCase):
 
         expected_same = kpsoi.deepcopy()
         expected_both_shifted = kpsoi.shift(x=1)
-        expected_first_shifted = ia.KeypointsOnImage(
+        expected_fg_shifted = ia.KeypointsOnImage(
             [kpsoi.keypoints[0].shift(x=1), kpsoi.keypoints[1]],
             shape=self.kpsoi.shape)
-        expected_second_shifted = ia.KeypointsOnImage(
+        expected_bg_shifted = ia.KeypointsOnImage(
             [kpsoi.keypoints[0], kpsoi.keypoints[1].shift(x=1)],
             shape=self.kpsoi.shape)
 
@@ -1382,9 +1405,9 @@ class TestBlendAlphaElementwise(unittest.TestCase):
                 seen[0] += 1
             elif keypoints_equal([observed], [expected_both_shifted]):
                 seen[1] += 1
-            elif keypoints_equal([observed], [expected_first_shifted]):
+            elif keypoints_equal([observed], [expected_fg_shifted]):
                 seen[2] += 1
-            elif keypoints_equal([observed], [expected_second_shifted]):
+            elif keypoints_equal([observed], [expected_bg_shifted]):
                 seen[3] += 1
             else:
                 assert False
@@ -1673,7 +1696,7 @@ class TestBlendAlphaElementwise(unittest.TestCase):
         for shape in shapes:
             with self.subTest(shape=shape):
                 image = np.full(shape, 0, dtype=np.uint8)
-                aug = iaa.Alpha(1.0, iaa.Add(1), iaa.Add(100))
+                aug = iaa.BlendAlpha(1.0, iaa.Add(1), iaa.Add(100))
 
                 image_aug = aug(image=image)
 
@@ -1692,7 +1715,7 @@ class TestBlendAlphaElementwise(unittest.TestCase):
         for shape in shapes:
             with self.subTest(shape=shape):
                 image = np.full(shape, 0, dtype=np.uint8)
-                aug = iaa.Alpha(1.0, iaa.Add(1), iaa.Add(100))
+                aug = iaa.BlendAlpha(1.0, iaa.Add(1), iaa.Add(100))
 
                 image_aug = aug(image=image)
 

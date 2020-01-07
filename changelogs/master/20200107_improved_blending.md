@@ -11,6 +11,8 @@
   `imgaug.parameters.FrequencyNoise` to also accept `(H, W, C)` sampling
   shapes, instead of only `(H, W)`.
 * Refactored `AlphaElementwise` to be a wrapper around `BlendAlphaMask`.
+* Renamed `Alpha` to `BlendAlpha`.
+  `AlphaElementwise` is now deprecated.
 * Renamed `AlphaElementwise` to `BlendAlphaElementwise`.
   `AlphaElementwise` is now deprecated.
 * Renamed `SimplexNoiseAlpha` to `BlendAlphaSimplexNoise`.
@@ -18,4 +20,5 @@
 * Renamed `FrequencyNoiseAlpha` to `BlendAlphaFrequencyNoise`.
   `FrequencyNoiseAlpha` is now deprecated.
 * Renamed arguments `first` and `second` to `foreground` and `background`
-  in `BlendAlphaElementwise`, `SimplexNoiseAlpha` and `FrequencyNoiseAlpha`.
+  in `BlendAlpha`, `BlendAlphaElementwise`, `BlendAlphaSimplexNoise` and
+  `BlendAlphaFrequencyNoise`.
