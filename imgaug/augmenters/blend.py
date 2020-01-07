@@ -240,25 +240,6 @@ def _to_deterministic(augmenter):
     return aug
 
 
-@ia.deprecated(alt_func="Alpha",
-               comment="Alpha is deprecated. "
-                       "Use BlendAlpha instead. "
-                       "The order of parameters is the same. "
-                       "Parameter 'first' was renamed to 'foreground'. "
-                       "Parameter 'second' was renamed to 'background'.")
-def Alpha(factor=0, first=None, second=None, per_channel=False,
-          name=None, deterministic=False, random_state=None):
-    return BlendAlpha(
-        factor=factor,
-        foreground=first,
-        background=second,
-        per_channel=per_channel,
-        name=name,
-        deterministic=deterministic,
-        random_state=random_state
-    )
-
-
 class BlendAlpha(meta.Augmenter):
     """
     Alpha-blend two image sources using an alpha/opacity value.
@@ -749,25 +730,6 @@ class BlendAlphaMask(meta.Augmenter):
             self.foreground, self.background, self.deterministic)
 
 
-
-@ia.deprecated(alt_func="AlphaElementwise",
-               comment="AlphaElementwise is deprecated. "
-                       "Use BlendAlphaElementwise instead. "
-                       "The order of parameters is the same. "
-                       "Parameter 'first' was renamed to 'foreground'. "
-                       "Parameter 'second' was renamed to 'background'.")
-def AlphaElementwise(factor=0, first=None, second=None, per_channel=False,
-                     name=None, deterministic=False, random_state=None):
-    return BlendAlphaElementwise(
-        factor=factor,
-        foreground=first,
-        background=second,
-        per_channel=per_channel,
-        name=name,
-        deterministic=deterministic,
-        random_state=random_state
-    )
-
 # FIXME the output of the third example makes it look like per_channel isn't
 #       working
 class BlendAlphaElementwise(BlendAlphaMask):
@@ -911,33 +873,6 @@ class BlendAlphaElementwise(BlendAlphaMask):
     @property
     def factor(self):
         return self.mask_generator.parameter
-
-
-@ia.deprecated(alt_func="BlendAlphaSimplexNoise",
-               comment="SimplexNoiseAlpha is deprecated. "
-                       "Use BlendAlphaSimplexNoise instead. "
-                       "The order of parameters is the same. "
-                       "Parameter 'first' was renamed to 'foreground'. "
-                       "Parameter 'second' was renamed to 'background'.")
-def SimplexNoiseAlpha(first=None, second=None, per_channel=False,
-                      size_px_max=(2, 16), upscale_method=None,
-                      iterations=(1, 3), aggregation_method="max",
-                      sigmoid=True, sigmoid_thresh=None,
-                      name=None, deterministic=False, random_state=None):
-    return BlendAlphaSimplexNoise(
-        foreground=first,
-        background=second,
-        per_channel=per_channel,
-        size_px_max=size_px_max,
-        upscale_method=upscale_method,
-        iterations=iterations,
-        aggregation_method=aggregation_method,
-        sigmoid=sigmoid,
-        sigmoid_thresh=sigmoid_thresh,
-        name=name,
-        deterministic=deterministic,
-        random_state=random_state
-    )
 
 
 class BlendAlphaSimplexNoise(BlendAlphaElementwise):
@@ -1150,36 +1085,6 @@ class BlendAlphaSimplexNoise(BlendAlphaElementwise):
             per_channel=per_channel,
             name=name, deterministic=deterministic, random_state=random_state
         )
-
-
-@ia.deprecated(alt_func="BlendAlphaFrequencyNoise",
-               comment="FrequencyNoiseAlpha is deprecated. "
-                       "Use BlendAlphaFrequencyNoise instead. "
-                       "The order of parameters is the same. "
-                       "Parameter 'first' was renamed to 'foreground'. "
-                       "Parameter 'second' was renamed to 'background'.")
-def FrequencyNoiseAlpha(exponent=(-4, 4), first=None, second=None,
-                        per_channel=False, size_px_max=(4, 16),
-                        upscale_method=None,
-                        iterations=(1, 3), aggregation_method=["avg", "max"],
-                        sigmoid=0.5, sigmoid_thresh=None,
-                        name=None, deterministic=False, random_state=None):
-    return BlendAlphaFrequencyNoise(
-        exponent=exponent,
-        foreground=first,
-        background=second,
-        per_channel=per_channel,
-        size_px_max=size_px_max,
-        upscale_method=upscale_method,
-        iterations=iterations,
-        aggregation_method=aggregation_method,
-        sigmoid=sigmoid,
-        sigmoid_thresh=sigmoid_thresh,
-        name=name,
-        deterministic=deterministic,
-        random_state=random_state
-    )
-
 
 
 class BlendAlphaFrequencyNoise(BlendAlphaElementwise):
@@ -1530,3 +1435,97 @@ class StochasticParameterMaskGen(IBatchwiseMaskGenerator):
                     np.min(mask), np.max(mask),))
 
         return mask
+
+
+@ia.deprecated(alt_func="Alpha",
+               comment="Alpha is deprecated. "
+                       "Use BlendAlpha instead. "
+                       "The order of parameters is the same. "
+                       "Parameter 'first' was renamed to 'foreground'. "
+                       "Parameter 'second' was renamed to 'background'.")
+def Alpha(factor=0, first=None, second=None, per_channel=False,
+          name=None, deterministic=False, random_state=None):
+    return BlendAlpha(
+        factor=factor,
+        foreground=first,
+        background=second,
+        per_channel=per_channel,
+        name=name,
+        deterministic=deterministic,
+        random_state=random_state
+    )
+
+
+@ia.deprecated(alt_func="AlphaElementwise",
+               comment="AlphaElementwise is deprecated. "
+                       "Use BlendAlphaElementwise instead. "
+                       "The order of parameters is the same. "
+                       "Parameter 'first' was renamed to 'foreground'. "
+                       "Parameter 'second' was renamed to 'background'.")
+def AlphaElementwise(factor=0, first=None, second=None, per_channel=False,
+                     name=None, deterministic=False, random_state=None):
+    return BlendAlphaElementwise(
+        factor=factor,
+        foreground=first,
+        background=second,
+        per_channel=per_channel,
+        name=name,
+        deterministic=deterministic,
+        random_state=random_state
+    )
+
+
+@ia.deprecated(alt_func="BlendAlphaSimplexNoise",
+               comment="SimplexNoiseAlpha is deprecated. "
+                       "Use BlendAlphaSimplexNoise instead. "
+                       "The order of parameters is the same. "
+                       "Parameter 'first' was renamed to 'foreground'. "
+                       "Parameter 'second' was renamed to 'background'.")
+def SimplexNoiseAlpha(first=None, second=None, per_channel=False,
+                      size_px_max=(2, 16), upscale_method=None,
+                      iterations=(1, 3), aggregation_method="max",
+                      sigmoid=True, sigmoid_thresh=None,
+                      name=None, deterministic=False, random_state=None):
+    return BlendAlphaSimplexNoise(
+        foreground=first,
+        background=second,
+        per_channel=per_channel,
+        size_px_max=size_px_max,
+        upscale_method=upscale_method,
+        iterations=iterations,
+        aggregation_method=aggregation_method,
+        sigmoid=sigmoid,
+        sigmoid_thresh=sigmoid_thresh,
+        name=name,
+        deterministic=deterministic,
+        random_state=random_state
+    )
+
+
+@ia.deprecated(alt_func="BlendAlphaFrequencyNoise",
+               comment="FrequencyNoiseAlpha is deprecated. "
+                       "Use BlendAlphaFrequencyNoise instead. "
+                       "The order of parameters is the same. "
+                       "Parameter 'first' was renamed to 'foreground'. "
+                       "Parameter 'second' was renamed to 'background'.")
+def FrequencyNoiseAlpha(exponent=(-4, 4), first=None, second=None,
+                        per_channel=False, size_px_max=(4, 16),
+                        upscale_method=None,
+                        iterations=(1, 3), aggregation_method=["avg", "max"],
+                        sigmoid=0.5, sigmoid_thresh=None,
+                        name=None, deterministic=False, random_state=None):
+    return BlendAlphaFrequencyNoise(
+        exponent=exponent,
+        foreground=first,
+        background=second,
+        per_channel=per_channel,
+        size_px_max=size_px_max,
+        upscale_method=upscale_method,
+        iterations=iterations,
+        aggregation_method=aggregation_method,
+        sigmoid=sigmoid,
+        sigmoid_thresh=sigmoid_thresh,
+        name=name,
+        deterministic=deterministic,
+        random_state=random_state
+    )
