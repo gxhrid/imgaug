@@ -285,7 +285,7 @@ class Alpha(meta.Augmenter):
             * If iterable of ``Augmenter``, then that iterable will be
               converted into a ``Sequential`` and used as the augmenter.
 
-    per_channel : bool or float, optional
+    per_channel : bool or float or imgaug.parameters.StochasticParameter, optional
         Whether to use the same factor for all channels (``False``)
         or to sample a new value for each channel (``True``).
         If this value is a float ``p``, then for ``p`` percent of all images
@@ -1563,3 +1563,77 @@ class IBatchwiseMaskGenerator(object):
             same mask.
 
         """
+
+
+class StochasticParameterMaskGen(IBatchwiseMaskGenerator):
+    """Mask generator that queries stochastic parameters for mask values.
+
+    This class receives batches for which to generate masks, iterates over
+    the batch rows (i.e. images) and generates one mask per row.
+    For a row with shape ``(H, W, C)`` (= image shape), it generates
+    either a ``(H, W)`` mask (if ``per_channel`` is false-like) or a
+    ``(H, W, C)`` mask (if ``per_channel`` is true-like).
+    The ``per_channel`` is sampled per batch for each row/image.
+
+    Parameters
+    ----------
+    parameter : imgaug.parameters.StochasticParameter
+        Stochastic parameter to draw mask samples from.
+        Expected to return values in interval ``[0.0, 1.0]`` (not all
+        stochastic parameters do that) and must be able to handle sampling
+        shapes ``(H, W)`` and ``(H, W, C)`` (all stochastic parameters should
+        do that).
+
+    per_channel : bool or float or imgaug.parameters.StochasticParameter, optional
+        Whether to use the same mask for all channels (``False``)
+        or to sample a new mask for each channel (``True``).
+        If this value is a float ``p``, then for ``p`` percent of all rows
+        (i.e. images) `per_channel` will be treated as ``True``, otherwise
+        as ``False``.
+
+    """
+
+    def __init__(self, parameter, per_channel):
+        super(StochasticParameterMaskGen, self).__init__()
+        self.parameter = parameter
+        self.per_channel = iap.handle_probability_param(per_channel,
+                                                        "per_channel")
+
+    def draw_masks(self, batch, random_state=None):
+        """
+        See :func:`imgaug.augmenters.blend.IBatchwiseMaskGenerator.draw_masks`.
+
+        """
+        shapes = batch.get_rowwise_shapes()
+        random_state = iarandom.RNG(random_state)
+        per_channel = self.per_channel.draw_samples((len(shapes),),
+                                                    random_state=random_state)
+
+        return [self._draw_mask(shape, random_state, per_channel_i)
+                for shape, per_channel_i
+                in zip(shapes, per_channel)]
+
+    def _draw_mask(self, shape, random_state, per_channel):
+        if len(shape) == 2 or per_channel >= 0.5:
+            mask = self.parameter.draw_samples(shape,
+                                               random_state=random_state)
+        else:
+            # TODO When this was wrongly sampled directly as (H,W,C) no
+            #      test for AlphaElementwise ended up failing. That should not
+            #      happen.
+
+            # We are guarantueed here to have (H, W, C) as shape (H, W) is
+            # handled by the above block.
+            # As the mask is not channelwise, we will just return (H, W)
+            # instead of (H, W, C).
+            mask = self.parameter.draw_samples(shape[0:2],
+                                               random_state=random_state)
+
+        # mask has no elements if height or width in shape is 0
+        if mask.size > 0:
+            assert 0 <= mask.item(0) <= 1.0, (
+                "Expected 'parameter' samples to be in the interval "
+                "[0.0, 1.0]. Got min %.4f and max %.4f." % (
+                    np.min(mask), np.max(mask),))
+
+        return mask

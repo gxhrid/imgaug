@@ -1682,3 +1682,108 @@ class TestAlphaElementwise(unittest.TestCase):
             per_channel=True,
             random_state=3)
         runtest_pickleable_uint8_img(aug, iterations=3)
+
+
+class TestStochasticParameterMaskGen(unittest.TestCase):
+    def _test_draw_masks_nhwc(self, shape):
+        batch = ia.BatchInAugmentation(
+            images=np.zeros(shape, dtype=np.uint8)
+        )
+        values = np.float32([
+            [0.1, 0.2, 0.3],
+            [0.4, 0.5, 0.6]
+        ])
+        param = iap.DeterministicList(values.flatten())
+
+        gen = iaa.StochasticParameterMaskGen(param, per_channel=False)
+
+        masks = gen.draw_masks(batch, random_state=0)
+
+        for i in np.arange(shape[0]):
+            assert np.allclose(masks[i], values)
+
+    def test_draw_masks_hw3_images(self):
+        self._test_draw_masks_nhwc((2, 2, 3, 3))
+
+    def test_draw_masks_hw1_images(self):
+        self._test_draw_masks_nhwc((2, 2, 3, 1))
+
+    def test_draw_masks_hw_images(self):
+        self._test_draw_masks_nhwc((2, 2, 3))
+
+    def test_draw_masks_batch_without_images(self):
+        bb = ia.BoundingBox(x1=1, y1=2, x2=3, y2=4)
+        bbsoi1 = ia.BoundingBoxesOnImage([bb], shape=(2, 3, 3))
+        bbsoi2 = ia.BoundingBoxesOnImage([], shape=(3, 3, 3))
+        batch = ia.BatchInAugmentation(
+            bounding_boxes=[bbsoi1, bbsoi2]
+        )
+        # sampling for shape of bbsoi1 will cover row1 and row2, then
+        # sampling for bbsoi2 will cover row1, row2, row3
+        # masks are sampled independently per row/image, so it starts over
+        # again for bbsoi2
+        values = np.float32([
+            [0.1, 0.2, 0.3],
+            [0.4, 0.5, 0.6],
+            [0.7, 0.8, 0.9]
+        ])
+        param = iap.DeterministicList(values.flatten())
+
+        gen = iaa.StochasticParameterMaskGen(param, per_channel=False)
+
+        masks = gen.draw_masks(batch, random_state=0)
+
+        expected1 = values[0:2]
+        expected2 = values[0:3]
+        assert np.allclose(masks[0], expected1)
+        assert np.allclose(masks[1], expected2)
+
+    def test_per_channel(self):
+        for per_channel in [True, iap.Deterministic(0.51)]:
+            batch = ia.BatchInAugmentation(
+                images=np.zeros((1, 2, 3, 2), dtype=np.uint8)
+            )
+            values = np.float32([
+                [0.1, 0.2, 0.3],
+                [0.4, 0.5, 0.6],
+                [0.7, 0.8, 0.9],
+                [0.10, 0.11, 0.12]
+            ])
+            param = iap.DeterministicList(values.flatten())
+
+            gen = iaa.StochasticParameterMaskGen(param,
+                                                 per_channel=per_channel)
+
+            masks = gen.draw_masks(batch, random_state=0)
+
+            assert np.allclose(masks[0], values.reshape((2, 3, 2)))
+
+    def test_zero_sized_axes(self):
+        shapes = [
+            (0, 0),
+            (0, 1),
+            (1, 0),
+            (0, 1, 0),
+            (1, 0, 0),
+            (0, 1, 1),
+            (1, 0, 1)
+        ]
+
+        for per_channel in [False, True]:
+            for shape in shapes:
+                with self.subTest(per_channel=per_channel, shape=shape):
+                    image = np.zeros(shape, dtype=np.uint8)
+                    batch = ia.BatchInAugmentation(
+                        images=[np.zeros(shape, dtype=np.uint8)]
+                    )
+                    param = iap.Deterministic(1.0)
+                    gen = iaa.StochasticParameterMaskGen(
+                        param, per_channel=per_channel)
+
+                    masks = gen.draw_masks(batch, random_state=0)
+
+                    assert len(masks) == 1
+                    if not per_channel:
+                        assert masks[0].shape == shape[0:2]
+                    else:
+                        assert masks[0].shape == shape
