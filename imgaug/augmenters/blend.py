@@ -768,26 +768,18 @@ class AlphaElementwise(BlendAlphaMask):
 
     See :class:`Alpha` for more details.
 
+    This class is a wrapper around
+    :class:`imgaug.augmenters.blend.BlendAlphaMask`.
+
     .. note::
 
-        It is not recommended to use ``AlphaElementwise`` with augmenters
-        that change the geometry of images (e.g. horizontal flips, affine
-        transformations) if you *also* want to augment coordinates (e.g.
-        keypoints, polygons, ...), as it is unclear which of the two
-        coordinate results (first or second branch) should be used as the
-        coordinates after augmentation.
-
-        Currently, the for keypoints and line strings the results of the
-        first and second branch will be mixed. For each coordinate, the
-        augmented one from the first or second branch will be picked based
-        on the average alpha mask value at the corresponding spatial location.
-
-        For polygons, only all polygons of the first or all of the second
-        branch will be used, based on the average over the whole alpha mask.
+        Avoid using augmenters as children that affect pixel locations (e.g.
+        horizontal flips). See
+        :class:`imgaug.augmenters.blend.BlendAlphaMask` for details.
 
     dtype support::
 
-        See :func:`imgaug.augmenters.blend.blend_alpha`.
+        See :class:`imgaug.augmenters.blend.BlendAlphaMask`.
 
     Parameters
     ----------
