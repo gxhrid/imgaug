@@ -15,5 +15,7 @@
   `AlphaElementwise` is now deprecated.
 * Renamed `SimplexNoiseAlpha` to `BlendAlphaSimplexNoise`.
   `SimplexNoiseAlpha` is now deprecated.
+* Renamed `FrequencyNoiseAlpha` to `BlendAlphaFrequencyNoise`.
+  `FrequencyNoiseAlpha` is now deprecated.
 * Renamed arguments `first` and `second` to `foreground` and `background`
   in `BlendAlphaElementwise`, `SimplexNoiseAlpha` and `FrequencyNoiseAlpha`.

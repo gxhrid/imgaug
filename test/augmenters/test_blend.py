@@ -1833,3 +1833,23 @@ class TestSimplexNoiseAlpha(unittest.TestCase):
         assert isinstance(aug, iaa.BlendAlphaSimplexNoise)
         assert aug.foreground is aug1
         assert aug.background is aug2
+
+
+class TestFrequencyNoiseAlpha(unittest.TestCase):
+    def test_deprecation_warning(self):
+        aug1 = iaa.Sequential([])
+        aug2 = iaa.Sequential([])
+
+        with warnings.catch_warnings(record=True) as caught_warnings:
+            warnings.simplefilter("always")
+
+            aug = iaa.FrequencyNoiseAlpha(first=aug1, second=aug2)
+
+            assert (
+                "is deprecated"
+                in str(caught_warnings[-1].message)
+            )
+
+        assert isinstance(aug, iaa.BlendAlphaFrequencyNoise)
+        assert aug.foreground is aug1
+        assert aug.background is aug2

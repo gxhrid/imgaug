@@ -7,7 +7,7 @@ List of augmenters:
     * BlendAlphaMask
     * BlendAlphaElementwise
     * BlendAlphaSimplexNoise
-    * FrequencyNoiseAlpha
+    * BlendAlphaFrequencyNoise
 
 """
 from __future__ import print_function, division, absolute_import
@@ -1159,7 +1159,37 @@ class BlendAlphaSimplexNoise(BlendAlphaElementwise):
         )
 
 
-class FrequencyNoiseAlpha(BlendAlphaElementwise):
+@ia.deprecated(alt_func="BlendAlphaFrequencyNoise",
+               comment="FrequencyNoiseAlpha is deprecated. "
+                       "Use BlendAlphaFrequencyNoise instead. "
+                       "The order of parameters is the same. "
+                       "Parameter 'first' was renamed to 'foreground'. "
+                       "Parameter 'second' was renamed to 'background'.")
+def FrequencyNoiseAlpha(exponent=(-4, 4), first=None, second=None,
+                        per_channel=False, size_px_max=(4, 16),
+                        upscale_method=None,
+                        iterations=(1, 3), aggregation_method=["avg", "max"],
+                        sigmoid=0.5, sigmoid_thresh=None,
+                        name=None, deterministic=False, random_state=None):
+    return BlendAlphaFrequencyNoise(
+        exponent=exponent,
+        foreground=first,
+        background=second,
+        per_channel=per_channel,
+        size_px_max=size_px_max,
+        upscale_method=upscale_method,
+        iterations=iterations,
+        aggregation_method=aggregation_method,
+        sigmoid=sigmoid,
+        sigmoid_thresh=sigmoid_thresh,
+        name=name,
+        deterministic=deterministic,
+        random_state=random_state
+    )
+
+
+
+class BlendAlphaFrequencyNoise(BlendAlphaElementwise):
     """Alpha-blend two image sources using frequency noise masks.
 
     The alpha masks are sampled using frequency noise of varying scales,
@@ -1310,13 +1340,13 @@ class FrequencyNoiseAlpha(BlendAlphaElementwise):
     Examples
     --------
     >>> import imgaug.augmenters as iaa
-    >>> aug = iaa.FrequencyNoiseAlpha(foreground=iaa.EdgeDetect(1.0))
+    >>> aug = iaa.BlendAlphaFrequencyNoise(foreground=iaa.EdgeDetect(1.0))
 
     Detect per image all edges, mark them in a black and white image and
     then alpha-blend the result with the original image using frequency noise
     masks.
 
-    >>> aug = iaa.FrequencyNoiseAlpha(
+    >>> aug = iaa.BlendAlphaFrequencyNoise(
     >>>     foreground=iaa.EdgeDetect(1.0),
     >>>     upscale_method="nearest")
 
@@ -1324,7 +1354,7 @@ class FrequencyNoiseAlpha(BlendAlphaElementwise):
     scale the frequency noise masks to the final image sizes, i.e. no nearest
     neighbour upsampling is used. This results in smooth edges.
 
-    >>> aug = iaa.FrequencyNoiseAlpha(
+    >>> aug = iaa.BlendAlphaFrequencyNoise(
     >>>     foreground=iaa.EdgeDetect(1.0),
     >>>     upscale_method="linear")
 
@@ -1332,7 +1362,7 @@ class FrequencyNoiseAlpha(BlendAlphaElementwise):
     scale the frequency noise masks to the final image sizes, i.e. no nearest
     neighbour upsampling is used. This results in smooth edges.
 
-    >>> aug = iaa.FrequencyNoiseAlpha(
+    >>> aug = iaa.BlendAlphaFrequencyNoise(
     >>>     foreground=iaa.EdgeDetect(1.0),
     >>>     upscale_method="linear",
     >>>     exponent=-2,
@@ -1342,7 +1372,7 @@ class FrequencyNoiseAlpha(BlendAlphaElementwise):
     ``-2`` and the sigmoid deactivated, resulting in cloud-like patterns
     without sharp edges.
 
-    >>> aug = iaa.FrequencyNoiseAlpha(
+    >>> aug = iaa.BlendAlphaFrequencyNoise(
     >>>     foreground=iaa.EdgeDetect(1.0),
     >>>     sigmoid_thresh=iap.Normal(10.0, 5.0))
 
@@ -1392,7 +1422,7 @@ class FrequencyNoiseAlpha(BlendAlphaElementwise):
                 activated=sigmoid
             )
 
-        super(FrequencyNoiseAlpha, self).__init__(
+        super(BlendAlphaFrequencyNoise, self).__init__(
             factor=noise, foreground=foreground, background=background,
             per_channel=per_channel,
             name=name, deterministic=deterministic, random_state=random_state
