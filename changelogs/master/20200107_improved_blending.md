@@ -13,5 +13,7 @@
 * Refactored `AlphaElementwise` to be a wrapper around `BlendAlphaMask`.
 * Renamed `AlphaElementwise` to `BlendAlphaElementwise`.
   `AlphaElementwise` is now deprecated.
-* Renamedd arguments `first` and `second` to `foreground` and `background`
+* Renamed `SimplexNoiseAlpha` to `BlendAlphaSimplexNoise`.
+  `SimplexNoiseAlpha` is now deprecated.
+* Renamed arguments `first` and `second` to `foreground` and `background`
   in `BlendAlphaElementwise`, `SimplexNoiseAlpha` and `FrequencyNoiseAlpha`.

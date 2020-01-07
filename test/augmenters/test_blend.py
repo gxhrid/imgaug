@@ -1813,3 +1813,23 @@ class TestStochasticParameterMaskGen(unittest.TestCase):
                         assert masks[0].shape == shape[0:2]
                     else:
                         assert masks[0].shape == shape
+
+
+class TestSimplexNoiseAlpha(unittest.TestCase):
+    def test_deprecation_warning(self):
+        aug1 = iaa.Sequential([])
+        aug2 = iaa.Sequential([])
+
+        with warnings.catch_warnings(record=True) as caught_warnings:
+            warnings.simplefilter("always")
+
+            aug = iaa.SimplexNoiseAlpha(first=aug1, second=aug2)
+
+            assert (
+                "is deprecated"
+                in str(caught_warnings[-1].message)
+            )
+
+        assert isinstance(aug, iaa.BlendAlphaSimplexNoise)
+        assert aug.foreground is aug1
+        assert aug.background is aug2

@@ -6,7 +6,7 @@ List of augmenters:
     * Alpha
     * BlendAlphaMask
     * BlendAlphaElementwise
-    * SimplexNoiseAlpha
+    * BlendAlphaSimplexNoise
     * FrequencyNoiseAlpha
 
 """
@@ -920,7 +920,34 @@ class BlendAlphaElementwise(BlendAlphaMask):
         return self.mask_generator.parameter
 
 
-class SimplexNoiseAlpha(BlendAlphaElementwise):
+@ia.deprecated(alt_func="BlendAlphaSimplexNoise",
+               comment="SimplexNoiseAlpha is deprecated. "
+                       "Use BlendAlphaSimplexNoise instead. "
+                       "The order of parameters is the same. "
+                       "Parameter 'first' was renamed to 'foreground'. "
+                       "Parameter 'second' was renamed to 'background'.")
+def SimplexNoiseAlpha(first=None, second=None, per_channel=False,
+                      size_px_max=(2, 16), upscale_method=None,
+                      iterations=(1, 3), aggregation_method="max",
+                      sigmoid=True, sigmoid_thresh=None,
+                      name=None, deterministic=False, random_state=None):
+    return BlendAlphaSimplexNoise(
+        foreground=first,
+        background=second,
+        per_channel=per_channel,
+        size_px_max=size_px_max,
+        upscale_method=upscale_method,
+        iterations=iterations,
+        aggregation_method=aggregation_method,
+        sigmoid=sigmoid,
+        sigmoid_thresh=sigmoid_thresh,
+        name=name,
+        deterministic=deterministic,
+        random_state=random_state
+    )
+
+
+class BlendAlphaSimplexNoise(BlendAlphaElementwise):
     """Alpha-blend two image sources using simplex noise alpha masks.
 
     The alpha masks are sampled using a simplex noise method, roughly creating
@@ -1054,13 +1081,13 @@ class SimplexNoiseAlpha(BlendAlphaElementwise):
     Examples
     --------
     >>> import imgaug.augmenters as iaa
-    >>> aug = iaa.SimplexNoiseAlpha(iaa.EdgeDetect(1.0))
+    >>> aug = iaa.BlendAlphaSimplexNoise(iaa.EdgeDetect(1.0))
 
     Detect per image all edges, mark them in a black and white image and
     then alpha-blend the result with the original image using simplex noise
     masks.
 
-    >>> aug = iaa.SimplexNoiseAlpha(
+    >>> aug = iaa.BlendAlphaSimplexNoise(
     >>>     iaa.EdgeDetect(1.0),
     >>>     upscale_method="nearest")
 
@@ -1069,7 +1096,7 @@ class SimplexNoiseAlpha(BlendAlphaElementwise):
     no nearest linear upsampling is used. This leads to rectangles with sharp
     edges.
 
-    >>> aug = iaa.SimplexNoiseAlpha(
+    >>> aug = iaa.BlendAlphaSimplexNoise(
     >>>     iaa.EdgeDetect(1.0),
     >>>     upscale_method="linear")
 
@@ -1077,7 +1104,7 @@ class SimplexNoiseAlpha(BlendAlphaElementwise):
     scale the simplex noise masks to the final image sizes, i.e. no nearest
     neighbour upsampling is used. This leads to rectangles with smooth edges.
 
-    >>> aug = iaa.SimplexNoiseAlpha(
+    >>> aug = iaa.BlendAlphaSimplexNoise(
     >>>     iaa.EdgeDetect(1.0),
     >>>     sigmoid_thresh=iap.Normal(10.0, 5.0))
 
@@ -1125,7 +1152,7 @@ class SimplexNoiseAlpha(BlendAlphaElementwise):
                 activated=sigmoid
             )
 
-        super(SimplexNoiseAlpha, self).__init__(
+        super(BlendAlphaSimplexNoise, self).__init__(
             factor=noise, foreground=foreground, background=background,
             per_channel=per_channel,
             name=name, deterministic=deterministic, random_state=random_state
