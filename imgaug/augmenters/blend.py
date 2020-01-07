@@ -447,7 +447,6 @@ class Alpha(meta.Augmenter):
 
 # FIXME the output of the third example makes it look like per_channel isn't
 #       working
-# TODO switch line strings to either-or approach, like polygons
 class AlphaElementwise(Alpha):
     """
     Alpha-blend two image sources using alpha/opacity values sampled per pixel.
