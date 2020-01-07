@@ -1527,3 +1527,39 @@ class FrequencyNoiseAlpha(AlphaElementwise):
             factor=noise, first=first, second=second, per_channel=per_channel,
             name=name, deterministic=deterministic, random_state=random_state
         )
+
+
+@six.add_metaclass(ABCMeta)
+class IBatchwiseMaskGenerator(object):
+    """Interface for classes generating masks for batches.
+
+    Child classes are supposed to receive a batch and generate an iterable
+    of masks, one per row (i.e. image), matching the row shape (i.e. image
+    shape). This is used in :class:`imgaug.augmenters.blend.BlendAlphaMask`.
+
+    """
+
+    def draw_masks(self, batch, random_state=None):
+        """Generate a mask with given shape.
+
+        Parameters
+        ----------
+        batch : imgaug.augmentables.batches.BatchInAugmentation
+            Shape of the mask to sample.
+
+        random_state : None or int or imgaug.random.RNG or numpy.random.Generator or numpy.random.BitGenerator or numpy.random.SeedSequence or numpy.random.RandomState, optional
+            A seed or random number generator to use during the sampling
+            process. If ``None``, the global RNG will be used.
+            See also :func:`imgaug.augmenters.meta.Augmenter.__init__`
+            for a similar parameter with more details.
+
+        Returns
+        -------
+        iterable of ndarray
+            Masks, one per row in the batch.
+            Each mask must be a ``float32`` array in interval ``[0.0, 1.0]``.
+            It must either have the same shape as the row (i.e. the image)
+            or shape ``(H, W)`` if all channels are supposed to have the
+            same mask.
+
+        """
