@@ -225,6 +225,21 @@ def _generate_branch_outputs(augmenter, batch, hooks, parents):
     return outputs_fg, outputs_bg
 
 
+def _to_deterministic(augmenter):
+    aug = augmenter.copy()
+    aug.foreground = (
+        aug.foreground.to_deterministic()
+        if aug.foreground is not None
+        else None)
+    aug.background = (
+        aug.background.to_deterministic()
+        if aug.background is not None
+        else None)
+    aug.deterministic = True
+    aug.random_state = augmenter.random_state.derive_rng_()
+    return aug
+
+
 @ia.deprecated(alt_func="Alpha",
                comment="Alpha is deprecated. "
                        "Use BlendAlpha instead. "
@@ -444,18 +459,7 @@ class BlendAlpha(meta.Augmenter):
         return batch
 
     def _to_deterministic(self):
-        aug = self.copy()
-        aug.foreground = (
-            aug.foreground.to_deterministic()
-            if aug.foreground is not None
-            else None)
-        aug.background = (
-            aug.background.to_deterministic()
-            if aug.background is not None
-            else None)
-        aug.deterministic = True
-        aug.random_state = self.random_state.derive_rng_()
-        return aug
+        return _to_deterministic(self)
 
     def get_parameters(self):
         """See :func:`imgaug.augmenters.meta.Augmenter.get_parameters`."""
@@ -722,16 +726,7 @@ class BlendAlphaMask(meta.Augmenter):
         return augm_utils.invert_convert_cbaois_to_kpsois_(cbaoi, kpsoi_aug)
 
     def _to_deterministic(self):
-        aug = self.copy()
-        aug.foreground = (
-            aug.foreground.to_deterministic()
-            if aug.foreground is not None else None)
-        aug.background = (
-            aug.background.to_deterministic()
-            if aug.background is not None else None)
-        aug.deterministic = True
-        aug.random_state = self.random_state.derive_rng_()
-        return aug
+        return _to_deterministic(self)
 
     def get_parameters(self):
         """See :func:`imgaug.augmenters.meta.Augmenter.get_parameters`."""
