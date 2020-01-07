@@ -696,7 +696,7 @@ class BlendAlphaMask(meta.Augmenter):
                 x_int = int(np.round(coord[0]))
                 y_int = int(np.round(coord[1]))
                 if 0 <= y_int < h_img and 0 <= x_int < w_img:
-                    alphas_i = mask_image[y_int, x_int, :]
+                    alphas_i = mask_image[y_int, x_int, ...]
                     alpha = (
                         np.average(alphas_i) if alphas_i.size > 0 else 1.0)
                     if alpha > 0.5:
