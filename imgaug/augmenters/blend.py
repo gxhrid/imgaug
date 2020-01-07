@@ -194,7 +194,6 @@ def blend_alpha(image_fg, image_bg, alpha, eps=1e-2):
     return image_blend
 
 
-# TODO add to Alpha once switched to fg/bg
 def _generate_branch_outputs(augmenter, batch, hooks, parents):
     parents_extended = parents + [augmenter]
 
