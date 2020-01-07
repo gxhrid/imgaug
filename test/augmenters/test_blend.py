@@ -1038,20 +1038,24 @@ class TestAlpha(unittest.TestCase):
 class _DummyMaskParameter(iap.StochasticParameter):
     def __init__(self, inverted=False):
         super(_DummyMaskParameter, self).__init__()
-        self.nb_calls = 0
         self.inverted = inverted
 
     def _draw_samples(self, size, random_state):
-        self.nb_calls += 1
-        h, w = size
-        ones = np.ones((h, w), dtype=np.float32)
-        zeros = np.zeros((h, w), dtype=np.float32)
-        if self.nb_calls == 1:
-            return zeros if not self.inverted else ones
-        elif self.nb_calls in [2, 3]:
-            return ones if not self.inverted else zeros
-        else:
-            assert False
+        h, w = size[0:2]
+        nb_channels = 1 if len(size) == 2 else size[2]
+        assert nb_channels <= 3
+        result = []
+        for i in np.arange(nb_channels):
+            if i == 0:
+                result.append(np.zeros((h, w), dtype=np.float32))
+            else:
+                result.append(np.ones((h, w), dtype=np.float32))
+        result = np.stack(result, axis=-1)
+        if len(size) == 2:
+            result = result[:, :, 0]
+        if self.inverted:
+            result = 1.0 - result
+        return result
 
 
 # TODO add tests for heatmaps and segmaps that differ from the image size

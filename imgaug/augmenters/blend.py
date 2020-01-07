@@ -758,7 +758,7 @@ class BlendAlphaMask(meta.Augmenter):
 
 # FIXME the output of the third example makes it look like per_channel isn't
 #       working
-class AlphaElementwise(Alpha):
+class AlphaElementwise(BlendAlphaMask):
     """
     Alpha-blend two image sources using alpha/opacity values sampled per pixel.
 
@@ -890,197 +890,16 @@ class AlphaElementwise(Alpha):
 
     """
 
-    # Currently the mode is only used for keypoint augmentation.
-    # either or: use all keypoints from first or all from second branch (based
-    #   on average of the whole mask).
-    # pointwise: decide for each point whether to use the first or secon
-    #   branch's keypoint (based on the average mask value at the point's
-    #   xy-location).
-    _MODE_EITHER_OR = "either-or"
-    _MODE_POINTWISE = "pointwise"
-    _MODES = [_MODE_POINTWISE, _MODE_EITHER_OR]
-
     def __init__(self, factor=0, first=None, second=None, per_channel=False,
                  name=None, deterministic=False, random_state=None):
+        factor = iap.handle_continuous_param(
+            factor, "factor", value_range=(0, 1.0), tuple_to_uniform=True,
+            list_to_choice=True)
+        mask_gen = StochasticParameterMaskGen(factor, per_channel)
         super(AlphaElementwise, self).__init__(
-            factor=factor,
-            first=first,
-            second=second,
-            per_channel=per_channel,
-            name=name,
-            deterministic=deterministic,
-            random_state=random_state
+            mask_gen, first, second,
+            name=name, deterministic=deterministic, random_state=random_state
         )
-
-        # this controls how keypoints and polygons are augmented
-        # Non-keypoints currently uses an either-or approach.
-        # Using pointwise augmentation is problematic for polygons and line
-        # strings, because the order of the points may have changed (e.g.
-        # from clockwise to counter-clockwise). For polygons, it is also
-        # overall more likely that some child-augmenter added/deleted points
-        # and we would need a polygon recoverer.
-        # Overall it seems to be the better approach to use all polygons
-        # from one branch or the other, which guarantuees their validity.
-        # TODO decide the either-or not based on the whole average mask
-        #      value but on the average mask value within the polygon's area?
-        self._coord_modes = {
-            "keypoints": self._MODE_POINTWISE,
-            "polygons": self._MODE_EITHER_OR,
-            "line_strings": self._MODE_EITHER_OR,
-            "bounding_boxes": self._MODE_EITHER_OR
-        }
-
-    def _augment_batch(self, batch, random_state, parents, hooks):
-        batch_first, batch_second = self._generate_branch_outputs(
-            batch, hooks, parents)
-
-        shapes = batch.get_rowwise_shapes()
-        nb_images = len(shapes)
-        rngs = random_state.duplicate(nb_images+1)
-        per_channel = self.per_channel.draw_samples(nb_images,
-                                                    random_state=rngs[-1])
-
-        for i, shape in enumerate(shapes):
-            h, w, nb_channels = (
-                shape[0], shape[1], shape[2] if len(shape) > 2 else 1
-            )
-            mask = self._sample_mask(h, w, nb_channels, per_channel[i], rngs[i])
-
-            # blend images
-            if batch.images is not None:
-                batch.images[i] = blend_alpha(batch_first.images[i],
-                                              batch_second.images[i],
-                                              mask, eps=self.epsilon)
-
-            if batch.heatmaps is not None:
-                arr = batch.heatmaps[i].arr_0to1
-                arr_height, arr_width = arr.shape[0:2]
-                mask_binarized = self._binarize_mask(mask,
-                                                     arr_height, arr_width)
-                batch.heatmaps[i].arr_0to1 = blend_alpha(
-                    batch_first.heatmaps[i].arr_0to1,
-                    batch_second.heatmaps[i].arr_0to1,
-                    mask_binarized, eps=self.epsilon)
-
-            if batch.segmentation_maps is not None:
-                arr = batch.segmentation_maps[i].arr
-                arr_height, arr_width = arr.shape[0:2]
-                mask_binarized = self._binarize_mask(mask,
-                                                     arr_height, arr_width)
-                batch.segmentation_maps[i].arr = blend_alpha(
-                    batch_first.segmentation_maps[i].arr,
-                    batch_second.segmentation_maps[i].arr,
-                    mask_binarized, eps=self.epsilon)
-
-            for augm_attr_name in ["keypoints", "bounding_boxes", "polygons",
-                                   "line_strings"]:
-                augm_value = getattr(batch, augm_attr_name)
-                if augm_value is not None:
-                    augm_value[i] = self._blend_coordinates(
-                        augm_value[i],
-                        getattr(batch_first, augm_attr_name)[i],
-                        getattr(batch_second, augm_attr_name)[i],
-                        mask,
-                        self._coord_modes[augm_attr_name]
-                    )
-
-        return batch
-
-    def _sample_mask(self, height, width, nb_channels, per_channel, rng):
-        if per_channel > 0.5:
-            mask = [
-                self.factor.draw_samples((height, width), random_state=rng)
-                for _ in sm.xrange(nb_channels)]
-            mask = np.stack(mask, axis=-1).astype(np.float64)
-        else:
-            # TODO When this was wrongly sampled directly as (H,W,C) no
-            #      test for AlphaElementwise ended up failing. That should not
-            #      happen.
-            # note that this should not be (H,W,1) as otherwise
-            # SimplexNoiseAlpha fails as noise params expected a call of (H,W)
-            mask = self.factor.draw_samples((height, width), random_state=rng)
-            mask = np.tile(mask[..., np.newaxis], (1, 1, nb_channels))
-
-        # mask has no elements if height or width is 0
-        if mask.size > 0:
-            assert 0 <= mask.item(0) <= 1.0, (
-                "Expected 'factor' samples to be in the interval "
-                "[0.0, 1.0]. Got min %.4f and max %.4f." % (
-                    np.min(mask), np.max(mask),))
-
-        return mask
-
-    @classmethod
-    def _binarize_mask(cls, mask, arr_height, arr_width):
-        # Average over channels, resize to heatmap/segmap array size
-        # (+clip for cubic interpolation). We can use none-NN interpolation
-        # for segmaps here as this is just the mask and not the segmap
-        # array.
-        mask_3d = np.atleast_3d(mask)
-        mask_avg = (
-            np.average(mask_3d, axis=2) if mask_3d.shape[2] > 0 else 1.0)
-        mask_rs = ia.imresize_single_image(mask_avg, (arr_height, arr_width))
-        mask_arr = iadt.clip_(mask_rs, 0, 1.0)
-        mask_arr_binarized = (mask_arr >= 0.5)
-        return mask_arr_binarized
-
-    @classmethod
-    def _blend_coordinates(cls, cbaoi, cbaoi_first, cbaoi_second, mask_image,
-                           mode):
-        coords = augm_utils.convert_cbaois_to_kpsois(cbaoi)
-        coords_first = augm_utils.convert_cbaois_to_kpsois(cbaoi_first)
-        coords_second = augm_utils.convert_cbaois_to_kpsois(cbaoi_second)
-
-        coords = coords.to_xy_array()
-        coords_first = coords_first.to_xy_array()
-        coords_second = coords_second.to_xy_array()
-
-        h_img, w_img = mask_image.shape[0:2]
-
-        if mode == cls._MODE_POINTWISE:
-            # Augment pointwise, i.e. check for each point and its
-            # xy-location the average mask value and pick based on that
-            # either the point from the first or second branch.
-            assert len(coords_first) == len(coords_second), (
-                "Got different numbers of coordinates before/after "
-                "augmentation in AlphaElementwise. The number of "
-                "coordinates is currently not allowed to change for this "
-                "augmenter. Input contained %d coordinates, first branch "
-                "%d, second branch %d." % (
-                    len(coords), len(coords_first), len(coords_second)))
-
-            coords_aug = []
-            subgen = zip(coords, coords_first, coords_second)
-            for coord, coord_first, coord_second in subgen:
-                x_int = int(np.round(coord[0]))
-                y_int = int(np.round(coord[1]))
-                if 0 <= y_int < h_img and 0 <= x_int < w_img:
-                    alphas_i = mask_image[y_int, x_int, :]
-                    alpha = (
-                        np.average(alphas_i) if alphas_i.size > 0 else 1.0)
-                    if alpha > 0.5:
-                        coords_aug.append(coord_first)
-                    else:
-                        coords_aug.append(coord_second)
-                else:
-                    coords_aug.append((x_int, y_int))
-        else:
-            # Augment with an either-or approach over all points, i.e.
-            # based on the average of the whole mask, either all points
-            # from the first or all points from the second branch are
-            # used.
-            # Note that we ensured above that _keypoint_mode must be
-            # _MODE_EITHER_OR if it wasn't _MODE_POINTWISE.
-            mask_image_avg = (
-                np.average(mask_image) if mask_image.size > 0 else 1.0)
-            if mask_image_avg > 0.5:
-                coords_aug = coords_first
-            else:
-                coords_aug = coords_second
-
-        kpsoi_aug = ia.KeypointsOnImage.from_xy_array(
-            coords_aug, shape=cbaoi.shape)
-        return augm_utils.invert_convert_cbaois_to_kpsois_(cbaoi, kpsoi_aug)
 
 
 class SimplexNoiseAlpha(AlphaElementwise):
