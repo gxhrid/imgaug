@@ -1,5 +1,6 @@
 from __future__ import print_function, division, absolute_import
 
+import warnings
 import sys
 # unittest only added in 3.4 self.subTest()
 if sys.version_info[0] < 3 or sys.version_info[1] < 4:
@@ -1058,8 +1059,29 @@ class _DummyMaskParameter(iap.StochasticParameter):
         return result
 
 
-# TODO add tests for heatmaps and segmaps that differ from the image size
 class TestAlphaElementwise(unittest.TestCase):
+    def test_deprecation_warning(self):
+        aug1 = iaa.Sequential([])
+        aug2 = iaa.Sequential([])
+
+        with warnings.catch_warnings(record=True) as caught_warnings:
+            warnings.simplefilter("always")
+
+            aug = iaa.AlphaElementwise(factor=0.5, first=aug1, second=aug2)
+
+            assert (
+                "is deprecated"
+                in str(caught_warnings[-1].message)
+            )
+
+        assert isinstance(aug, iaa.BlendAlphaElementwise)
+        assert np.isclose(aug.factor.value, 0.5)
+        assert aug.foreground is aug1
+        assert aug.background is aug2
+
+
+# TODO add tests for heatmaps and segmaps that differ from the image size
+class TestBlendAlphaElementwise(unittest.TestCase):
     def setUp(self):
         reseed()
 
@@ -1132,13 +1154,13 @@ class TestAlphaElementwise(unittest.TestCase):
         return ia.BoundingBoxesOnImage(bbs, shape=(20, 20, 3))
 
     def test_images_factor_is_1(self):
-        aug = iaa.AlphaElementwise(1, iaa.Add(10), iaa.Add(20))
+        aug = iaa.BlendAlphaElementwise(1, iaa.Add(10), iaa.Add(20))
         observed = aug.augment_image(self.image)
         expected = self.image + 10
         assert np.allclose(observed, expected)
 
     def test_heatmaps_factor_is_1_with_affines(self):
-        aug = iaa.AlphaElementwise(
+        aug = iaa.BlendAlphaElementwise(
             1,
             iaa.Affine(translate_px={"x": 1}),
             iaa.Affine(translate_px={"x": -1}))
@@ -1149,7 +1171,7 @@ class TestAlphaElementwise(unittest.TestCase):
         assert np.allclose(observed.get_arr(), self.heatmaps_r1.get_arr())
 
     def test_segmaps_factor_is_1_with_affines(self):
-        aug = iaa.AlphaElementwise(
+        aug = iaa.BlendAlphaElementwise(
             1,
             iaa.Affine(translate_px={"x": 1}),
             iaa.Affine(translate_px={"x": -1}))
@@ -1158,13 +1180,13 @@ class TestAlphaElementwise(unittest.TestCase):
         assert np.array_equal(observed.get_arr(), self.segmaps_r1.get_arr())
 
     def test_images_factor_is_0(self):
-        aug = iaa.AlphaElementwise(0, iaa.Add(10), iaa.Add(20))
+        aug = iaa.BlendAlphaElementwise(0, iaa.Add(10), iaa.Add(20))
         observed = aug.augment_image(self.image)
         expected = self.image + 20
         assert np.allclose(observed, expected)
 
     def test_heatmaps_factor_is_0_with_affines(self):
-        aug = iaa.AlphaElementwise(
+        aug = iaa.BlendAlphaElementwise(
             0,
             iaa.Affine(translate_px={"x": 1}),
             iaa.Affine(translate_px={"x": -1}))
@@ -1175,7 +1197,7 @@ class TestAlphaElementwise(unittest.TestCase):
         assert np.allclose(observed.get_arr(), self.heatmaps_l1.get_arr())
 
     def test_segmaps_factor_is_0_with_affines(self):
-        aug = iaa.AlphaElementwise(
+        aug = iaa.BlendAlphaElementwise(
             0,
             iaa.Affine(translate_px={"x": 1}),
             iaa.Affine(translate_px={"x": -1}))
@@ -1184,7 +1206,7 @@ class TestAlphaElementwise(unittest.TestCase):
         assert np.array_equal(observed.get_arr(), self.segmaps_l1.get_arr())
 
     def test_images_factor_is_075(self):
-        aug = iaa.AlphaElementwise(0.75, iaa.Add(10), iaa.Add(20))
+        aug = iaa.BlendAlphaElementwise(0.75, iaa.Add(10), iaa.Add(20))
         observed = aug.augment_image(self.image)
         expected = np.round(
             self.image + 0.75 * 10 + 0.25 * 20
@@ -1192,7 +1214,7 @@ class TestAlphaElementwise(unittest.TestCase):
         assert np.allclose(observed, expected)
 
     def test_images_factor_is_075_first_branch_is_none(self):
-        aug = iaa.AlphaElementwise(0.75, None, iaa.Add(20))
+        aug = iaa.BlendAlphaElementwise(0.75, None, iaa.Add(20))
         observed = aug.augment_image(self.image + 10)
         expected = np.round(
             self.image + 0.75 * 10 + 0.25 * (10 + 20)
@@ -1200,7 +1222,7 @@ class TestAlphaElementwise(unittest.TestCase):
         assert np.allclose(observed, expected)
 
     def test_images_factor_is_075_second_branch_is_none(self):
-        aug = iaa.AlphaElementwise(0.75, iaa.Add(10), None)
+        aug = iaa.BlendAlphaElementwise(0.75, iaa.Add(10), None)
         observed = aug.augment_image(self.image + 10)
         expected = np.round(
             self.image + 0.75 * (10 + 10) + 0.25 * 10
@@ -1209,7 +1231,7 @@ class TestAlphaElementwise(unittest.TestCase):
 
     def test_images_factor_is_tuple(self):
         image = np.zeros((100, 100), dtype=np.uint8)
-        aug = iaa.AlphaElementwise((0.0, 1.0), iaa.Add(10), iaa.Add(110))
+        aug = iaa.BlendAlphaElementwise((0.0, 1.0), iaa.Add(10), iaa.Add(110))
         observed = (aug.augment_image(image) - 10) / 100
         nb_bins = 10
         hist, _ = np.histogram(
@@ -1224,7 +1246,7 @@ class TestAlphaElementwise(unittest.TestCase):
     def test_bad_datatype_for_factor_fails(self):
         got_exception = False
         try:
-            _ = iaa.AlphaElementwise(False, iaa.Add(10), None)
+            _ = iaa.BlendAlphaElementwise(False, iaa.Add(10), None)
         except Exception as exc:
             assert "Expected " in str(exc)
             got_exception = True
@@ -1232,7 +1254,7 @@ class TestAlphaElementwise(unittest.TestCase):
 
     def test_images_with_per_channel_in_alpha_and_tuple_as_factor(self):
         image = np.zeros((1, 1, 100), dtype=np.uint8)
-        aug = iaa.AlphaElementwise(
+        aug = iaa.BlendAlphaElementwise(
             (0.0, 1.0),
             iaa.Add(10),
             iaa.Add(110),
@@ -1243,7 +1265,7 @@ class TestAlphaElementwise(unittest.TestCase):
     def test_bad_datatype_for_per_channel_fails(self):
         got_exception = False
         try:
-            _ = iaa.AlphaElementwise(
+            _ = iaa.BlendAlphaElementwise(
                 0.5,
                 iaa.Add(10),
                 None,
@@ -1254,7 +1276,7 @@ class TestAlphaElementwise(unittest.TestCase):
         assert got_exception
 
     def test_hooks_limiting_propagation(self):
-        aug = iaa.AlphaElementwise(
+        aug = iaa.BlendAlphaElementwise(
             0.5,
             iaa.Add(100),
             iaa.Add(50),
@@ -1272,7 +1294,7 @@ class TestAlphaElementwise(unittest.TestCase):
         assert np.array_equal(observed, image)
 
     def test_heatmaps_and_per_channel_factor_is_zeros(self):
-        aug = iaa.AlphaElementwise(
+        aug = iaa.BlendAlphaElementwise(
             _DummyMaskParameter(inverted=False),
             iaa.Affine(translate_px={"x": 1}),
             iaa.Affine(translate_px={"x": -1}),
@@ -1284,7 +1306,7 @@ class TestAlphaElementwise(unittest.TestCase):
         assert np.allclose(observed.get_arr(), self.heatmaps_r1.get_arr())
 
     def test_heatmaps_and_per_channel_factor_is_ones(self):
-        aug = iaa.AlphaElementwise(
+        aug = iaa.BlendAlphaElementwise(
             _DummyMaskParameter(inverted=True),
             iaa.Affine(translate_px={"x": 1}),
             iaa.Affine(translate_px={"x": -1}),
@@ -1296,7 +1318,7 @@ class TestAlphaElementwise(unittest.TestCase):
         assert np.allclose(observed.get_arr(), self.heatmaps_l1.get_arr())
 
     def test_segmaps_and_per_channel_factor_is_zeros(self):
-        aug = iaa.AlphaElementwise(
+        aug = iaa.BlendAlphaElementwise(
             _DummyMaskParameter(inverted=False),
             iaa.Affine(translate_px={"x": 1}),
             iaa.Affine(translate_px={"x": -1}),
@@ -1306,7 +1328,7 @@ class TestAlphaElementwise(unittest.TestCase):
         assert np.array_equal(observed.get_arr(), self.segmaps_r1.get_arr())
 
     def test_segmaps_and_per_channel_factor_is_ones(self):
-        aug = iaa.AlphaElementwise(
+        aug = iaa.BlendAlphaElementwise(
             _DummyMaskParameter(inverted=True),
             iaa.Affine(translate_px={"x": 1}),
             iaa.Affine(translate_px={"x": -1}),
@@ -1488,7 +1510,7 @@ class TestAlphaElementwise(unittest.TestCase):
 
     @classmethod
     def _test_cba_factor_is_1(cls, augf_name, cbaoi):
-        aug = iaa.AlphaElementwise(
+        aug = iaa.BlendAlphaElementwise(
             1.0,
             iaa.Identity(),
             iaa.Affine(translate_px={"x": 1}))
@@ -1499,7 +1521,7 @@ class TestAlphaElementwise(unittest.TestCase):
 
     @classmethod
     def _test_cba_factor_is_0501(cls, augf_name, cbaoi):
-        aug = iaa.AlphaElementwise(
+        aug = iaa.BlendAlphaElementwise(
             0.501,
             iaa.Identity(),
             iaa.Affine(translate_px={"x": 1}))
@@ -1510,7 +1532,7 @@ class TestAlphaElementwise(unittest.TestCase):
 
     @classmethod
     def _test_cba_factor_is_0(cls, augf_name, cbaoi):
-        aug = iaa.AlphaElementwise(
+        aug = iaa.BlendAlphaElementwise(
             0.0,
             iaa.Identity(),
             iaa.Affine(translate_px={"x": 1}))
@@ -1522,7 +1544,7 @@ class TestAlphaElementwise(unittest.TestCase):
 
     @classmethod
     def _test_cba_factor_is_0499(cls, augf_name, cbaoi):
-        aug = iaa.AlphaElementwise(
+        aug = iaa.BlendAlphaElementwise(
             0.499,
             iaa.Identity(),
             iaa.Affine(translate_px={"x": 1}))
@@ -1534,7 +1556,7 @@ class TestAlphaElementwise(unittest.TestCase):
 
     @classmethod
     def _test_cba_factor_is_1_and_per_channel(cls, augf_name, cbaoi):
-        aug = iaa.AlphaElementwise(
+        aug = iaa.BlendAlphaElementwise(
             1.0,
             iaa.Identity(),
             iaa.Affine(translate_px={"x": 1}),
@@ -1546,7 +1568,7 @@ class TestAlphaElementwise(unittest.TestCase):
 
     @classmethod
     def _test_cba_factor_is_0_and_per_channel(cls, augf_name, cbaoi):
-        aug = iaa.AlphaElementwise(
+        aug = iaa.BlendAlphaElementwise(
             0.0,
             iaa.Identity(),
             iaa.Affine(translate_px={"x": 1}),
@@ -1560,7 +1582,7 @@ class TestAlphaElementwise(unittest.TestCase):
     @classmethod
     def _test_cba_factor_is_choice_around_050_and_per_channel(
             cls, augf_name, cbaoi, pointwise):
-        aug = iaa.AlphaElementwise(
+        aug = iaa.BlendAlphaElementwise(
             iap.Choice([0.49, 0.51]),
             iaa.Identity(),
             iaa.Affine(translate_px={"x": 1}),
@@ -1608,7 +1630,7 @@ class TestAlphaElementwise(unittest.TestCase):
 
     @classmethod
     def _test_empty_cba(cls, augf_name, cbaoi):
-        aug = iaa.AlphaElementwise(
+        aug = iaa.BlendAlphaElementwise(
             0.501,
             iaa.Identity(),
             iaa.Affine(translate_px={"x": 1}))
@@ -1620,7 +1642,7 @@ class TestAlphaElementwise(unittest.TestCase):
 
     @classmethod
     def _test_cba_hooks_limit_propagation(cls, augf_name, cbaoi):
-        aug = iaa.AlphaElementwise(
+        aug = iaa.BlendAlphaElementwise(
             0.0,
             iaa.Affine(translate_px={"x": 1}),
             iaa.Affine(translate_px={"y": 1}),
@@ -1679,7 +1701,7 @@ class TestAlphaElementwise(unittest.TestCase):
                 assert image_aug.shape == shape
 
     def test_pickleable(self):
-        aug = iaa.AlphaElementwise(
+        aug = iaa.BlendAlphaElementwise(
             (0.1, 0.9),
             iaa.Add((1, 10), random_state=1),
             iaa.Add((11, 20), random_state=2),

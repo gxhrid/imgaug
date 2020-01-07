@@ -5,7 +5,7 @@ List of augmenters:
 
     * Alpha
     * BlendAlphaMask
-    * AlphaElementwise
+    * BlendAlphaElementwise
     * SimplexNoiseAlpha
     * FrequencyNoiseAlpha
 
@@ -481,7 +481,7 @@ class Alpha(meta.Augmenter):
             self.first, self.second, self.deterministic)
 
 
-# tested indirectly via AlphaElementwise for historic reasons
+# tested indirectly via BlendAlphaElementwise for historic reasons
 class BlendAlphaMask(meta.Augmenter):
     """
     Alpha-blend two image sources using masks generated per image.
@@ -684,7 +684,7 @@ class BlendAlphaMask(meta.Augmenter):
             # either the point from the first or second branch.
             assert len(coords_first) == len(coords_second), (
                 "Got different numbers of coordinates before/after "
-                "augmentation in AlphaElementwise. The number of "
+                "augmentation in BlendAlphaMask. The number of "
                 "coordinates is currently not allowed to change for this "
                 "augmenter. Input contained %d coordinates, first branch "
                 "%d, second branch %d." % (
@@ -756,9 +756,28 @@ class BlendAlphaMask(meta.Augmenter):
             self.foreground, self.background, self.deterministic)
 
 
+
+@ia.deprecated(alt_func="AlphaElementwise",
+               comment="AlphaElementwise is deprecated. "
+                       "Use BlendAlphaElementwise instead. "
+                       "The order of parameters is the same. "
+                       "Parameter 'first' was renamed to 'foreground'. "
+                       "Parameter 'second' was renamed to 'background'.")
+def AlphaElementwise(factor=0, first=None, second=None, per_channel=False,
+                     name=None, deterministic=False, random_state=None):
+    return BlendAlphaElementwise(
+        factor=factor,
+        foreground=first,
+        background=second,
+        per_channel=per_channel,
+        name=name,
+        deterministic=deterministic,
+        random_state=random_state
+    )
+
 # FIXME the output of the third example makes it look like per_channel isn't
 #       working
-class AlphaElementwise(BlendAlphaMask):
+class BlendAlphaElementwise(BlendAlphaMask):
     """
     Alpha-blend two image sources using alpha/opacity values sampled per pixel.
 
@@ -784,9 +803,9 @@ class AlphaElementwise(BlendAlphaMask):
     Parameters
     ----------
     factor : number or tuple of number or list of number or imgaug.parameters.StochasticParameter, optional
-        Weighting of the results of the first branch. Values close to 0 mean
-        that the results from the second branch (see parameter `second`)
-        make up most of the final image.
+        Opacity of the results of the foreground branch. Values close to
+        ``0.0`` mean that the results from the background branch (see
+        parameter `background`) make up most of the final image.
 
             * If float, then that value will be used for all images.
             * If tuple ``(a, b)``, then a random value from the interval
@@ -796,20 +815,22 @@ class AlphaElementwise(BlendAlphaMask):
             * If ``StochasticParameter``, then that parameter will be used to
               sample a value per image.
 
-    first : None or imgaug.augmenters.meta.Augmenter or iterable of imgaug.augmenters.meta.Augmenter, optional
-        Augmenter(s) that make up the first of the two branches.
+    foreground : None or imgaug.augmenters.meta.Augmenter or iterable of imgaug.augmenters.meta.Augmenter, optional
+        Augmenter(s) that make up the foreground branch.
+        High alpha values will show this branch's results.
 
             * If ``None``, then the input images will be reused as the output
-              of the first branch.
+              of the foreground branch.
             * If ``Augmenter``, then that augmenter will be used as the branch.
             * If iterable of ``Augmenter``, then that iterable will be
               converted into a ``Sequential`` and used as the augmenter.
 
-    second : None or imgaug.augmenters.meta.Augmenter or iterable of imgaug.augmenters.meta.Augmenter, optional
-        Augmenter(s) that make up the second of the two branches.
+    background : None or imgaug.augmenters.meta.Augmenter or iterable of imgaug.augmenters.meta.Augmenter, optional
+        Augmenter(s) that make up the background branch.
+        Low alpha values will show this branch's results.
 
             * If ``None``, then the input images will be reused as the output
-              of the second branch.
+              of the background branch.
             * If ``Augmenter``, then that augmenter will be used as the branch.
             * If iterable of ``Augmenter``, then that iterable will be
               converted into a ``Sequential`` and used as the augmenter.
@@ -832,7 +853,7 @@ class AlphaElementwise(BlendAlphaMask):
     Examples
     --------
     >>> import imgaug.augmenters as iaa
-    >>> aug = iaa.AlphaElementwise(0.5, iaa.Grayscale(1.0))
+    >>> aug = iaa.BlendAlphaElementwise(0.5, iaa.Grayscale(1.0))
 
     Convert each image to pure grayscale and alpha-blend the result with the
     original image using an alpha of ``50%`` for all pixels, thereby removing
@@ -841,14 +862,14 @@ class AlphaElementwise(BlendAlphaMask):
     the opacity has a fixed value of ``0.5`` and is hence identical for all
     pixels.
 
-    >>> aug = iaa.AlphaElementwise((0, 1.0), iaa.Grayscale(1.0))
+    >>> aug = iaa.BlendAlphaElementwise((0, 1.0), iaa.Grayscale(1.0))
 
     Same as in the previous example, but the alpha factor is sampled uniformly
     from the interval ``[0.0, 1.0]`` once per pixel, thereby removing a random
     fraction of all colors from each pixel. This is equivalent to
     ``iaa.Grayscale((0.0, 1.0))``.
 
-    >>> aug = iaa.AlphaElementwise(
+    >>> aug = iaa.BlendAlphaElementwise(
     >>>     (0.0, 1.0),
     >>>     iaa.Affine(rotate=(-20, 20)),
     >>>     per_channel=0.5)
@@ -862,10 +883,10 @@ class AlphaElementwise(BlendAlphaMask):
     visibly rotated (factor near ``1.0``), while the green and blue channels
     may not look rotated (factors near ``0.0``).
 
-    >>> aug = iaa.AlphaElementwise(
+    >>> aug = iaa.BlendAlphaElementwise(
     >>>     (0.0, 1.0),
-    >>>     first=iaa.Add(100),
-    >>>     second=iaa.Multiply(0.2))
+    >>>     foreground=iaa.Add(100),
+    >>>     background=iaa.Multiply(0.2))
 
     Apply two branches of augmenters -- ``A`` and ``B`` -- *independently*
     to input images and alpha-blend the results of these branches using a
@@ -874,7 +895,7 @@ class AlphaElementwise(BlendAlphaMask):
     uniformly from the interval ``[0.0, 1.0]`` per pixel. The resulting images
     contain a bit of ``A`` and a bit of ``B``.
 
-    >>> aug = iaa.AlphaElementwise([0.25, 0.75], iaa.MedianBlur(13))
+    >>> aug = iaa.BlendAlphaElementwise([0.25, 0.75], iaa.MedianBlur(13))
 
     Apply median blur to each image and alpha-blend the result with the
     original image using an alpha factor of either exactly ``0.25`` or
@@ -882,19 +903,24 @@ class AlphaElementwise(BlendAlphaMask):
 
     """
 
-    def __init__(self, factor=0, first=None, second=None, per_channel=False,
+    def __init__(self, factor=0, foreground=None, background=None,
+                 per_channel=False,
                  name=None, deterministic=False, random_state=None):
         factor = iap.handle_continuous_param(
             factor, "factor", value_range=(0, 1.0), tuple_to_uniform=True,
             list_to_choice=True)
         mask_gen = StochasticParameterMaskGen(factor, per_channel)
-        super(AlphaElementwise, self).__init__(
-            mask_gen, first, second,
+        super(BlendAlphaElementwise, self).__init__(
+            mask_gen, foreground, background,
             name=name, deterministic=deterministic, random_state=random_state
         )
 
+    @property
+    def factor(self):
+        return self.mask_generator.parameter
 
-class SimplexNoiseAlpha(AlphaElementwise):
+
+class SimplexNoiseAlpha(BlendAlphaElementwise):
     """Alpha-blend two image sources using simplex noise alpha masks.
 
     The alpha masks are sampled using a simplex noise method, roughly creating
@@ -903,27 +929,29 @@ class SimplexNoiseAlpha(AlphaElementwise):
 
     dtype support::
 
-        See ``imgaug.augmenters.blend.AlphaElementwise``.
+        See ``imgaug.augmenters.blend.BlendAlphaElementwise``.
 
     Parameters
     ----------
-    first : None or imgaug.augmenters.meta.Augmenter or iterable of imgaug.augmenters.meta.Augmenter, optional
-        Augmenter(s) that make up the first of the two branches.
+    foreground : None or imgaug.augmenters.meta.Augmenter or iterable of imgaug.augmenters.meta.Augmenter, optional
+        Augmenter(s) that make up the foreground branch.
+        High alpha values will show this branch's results.
 
             * If ``None``, then the input images will be reused as the output
-              of the first branch.
+              of the foreground branch.
             * If ``Augmenter``, then that augmenter will be used as the branch.
             * If iterable of ``Augmenter``, then that iterable will be
-              converted into a Sequential and used as the augmenter.
+              converted into a ``Sequential`` and used as the augmenter.
 
-    second : None or imgaug.augmenters.meta.Augmenter or iterable of imgaug.augmenters.meta.Augmenter, optional
-        Augmenter(s) that make up the second of the two branches.
+    background : None or imgaug.augmenters.meta.Augmenter or iterable of imgaug.augmenters.meta.Augmenter, optional
+        Augmenter(s) that make up the background branch.
+        Low alpha values will show this branch's results.
 
             * If ``None``, then the input images will be reused as the output
-              of the second branch.
+              of the background branch.
             * If ``Augmenter``, then that augmenter will be used as the branch.
             * If iterable of ``Augmenter``, then that iterable will be
-              converted into a Sequential and used as the augmenter.
+              converted into a ``Sequential`` and used as the augmenter.
 
     per_channel : bool or float, optional
         Whether to use the same factor for all channels (``False``)
@@ -1056,13 +1084,13 @@ class SimplexNoiseAlpha(AlphaElementwise):
     Same as in the first example, but using a threshold for the sigmoid
     function that is further to the right. This is more conservative, i.e.
     the generated noise masks will be mostly black (values around ``0.0``),
-    which means that most of the original images (parameter/branch `second`)
-    will be kept, rather than using the results of the augmentation
-    (parameter/branch `first`).
+    which means that most of the original images (parameter/branch
+    `background`) will be kept, rather than using the results of the
+    augmentation (parameter/branch `foreground`).
 
     """
 
-    def __init__(self, first=None, second=None, per_channel=False,
+    def __init__(self, foreground=None, background=None, per_channel=False,
                  size_px_max=(2, 16), upscale_method=None,
                  iterations=(1, 3), aggregation_method="max",
                  sigmoid=True, sigmoid_thresh=None,
@@ -1098,12 +1126,13 @@ class SimplexNoiseAlpha(AlphaElementwise):
             )
 
         super(SimplexNoiseAlpha, self).__init__(
-            factor=noise, first=first, second=second, per_channel=per_channel,
+            factor=noise, foreground=foreground, background=background,
+            per_channel=per_channel,
             name=name, deterministic=deterministic, random_state=random_state
         )
 
 
-class FrequencyNoiseAlpha(AlphaElementwise):
+class FrequencyNoiseAlpha(BlendAlphaElementwise):
     """Alpha-blend two image sources using frequency noise masks.
 
     The alpha masks are sampled using frequency noise of varying scales,
@@ -1114,7 +1143,7 @@ class FrequencyNoiseAlpha(AlphaElementwise):
 
     dtype support::
 
-        See ``imgaug.augmenters.blend.AlphaElementwise``.
+        See ``imgaug.augmenters.blend.BlendAlphaElementwise``.
 
     Parameters
     ----------
@@ -1132,20 +1161,22 @@ class FrequencyNoiseAlpha(AlphaElementwise):
             * If a ``StochasticParameter``, then a value will be sampled from
               that parameter per iteration.
 
-    first : None or imgaug.augmenters.meta.Augmenter or iterable of imgaug.augmenters.meta.Augmenter, optional
-        Augmenter(s) that make up the first of the two branches.
+    foreground : None or imgaug.augmenters.meta.Augmenter or iterable of imgaug.augmenters.meta.Augmenter, optional
+        Augmenter(s) that make up the foreground branch.
+        High alpha values will show this branch's results.
 
             * If ``None``, then the input images will be reused as the output
-              of the first branch.
+              of the foreground branch.
             * If ``Augmenter``, then that augmenter will be used as the branch.
             * If iterable of ``Augmenter``, then that iterable will be
               converted into a ``Sequential`` and used as the augmenter.
 
-    second : None or imgaug.augmenters.meta.Augmenter or iterable of imgaug.augmenters.meta.Augmenter, optional
-        Augmenter(s) that make up the second of the two branches.
+    background : None or imgaug.augmenters.meta.Augmenter or iterable of imgaug.augmenters.meta.Augmenter, optional
+        Augmenter(s) that make up the background branch.
+        Low alpha values will show this branch's results.
 
             * If ``None``, then the input images will be reused as the output
-              of the second branch.
+              of the background branch.
             * If ``Augmenter``, then that augmenter will be used as the branch.
             * If iterable of ``Augmenter``, then that iterable will be
               converted into a ``Sequential`` and used as the augmenter.
@@ -1252,14 +1283,14 @@ class FrequencyNoiseAlpha(AlphaElementwise):
     Examples
     --------
     >>> import imgaug.augmenters as iaa
-    >>> aug = iaa.FrequencyNoiseAlpha(first=iaa.EdgeDetect(1.0))
+    >>> aug = iaa.FrequencyNoiseAlpha(foreground=iaa.EdgeDetect(1.0))
 
     Detect per image all edges, mark them in a black and white image and
     then alpha-blend the result with the original image using frequency noise
     masks.
 
     >>> aug = iaa.FrequencyNoiseAlpha(
-    >>>     first=iaa.EdgeDetect(1.0),
+    >>>     foreground=iaa.EdgeDetect(1.0),
     >>>     upscale_method="nearest")
 
     Same as the first example, but using only linear upscaling to
@@ -1267,7 +1298,7 @@ class FrequencyNoiseAlpha(AlphaElementwise):
     neighbour upsampling is used. This results in smooth edges.
 
     >>> aug = iaa.FrequencyNoiseAlpha(
-    >>>     first=iaa.EdgeDetect(1.0),
+    >>>     foreground=iaa.EdgeDetect(1.0),
     >>>     upscale_method="linear")
 
     Same as the first example, but using only linear upscaling to
@@ -1275,7 +1306,7 @@ class FrequencyNoiseAlpha(AlphaElementwise):
     neighbour upsampling is used. This results in smooth edges.
 
     >>> aug = iaa.FrequencyNoiseAlpha(
-    >>>     first=iaa.EdgeDetect(1.0),
+    >>>     foreground=iaa.EdgeDetect(1.0),
     >>>     upscale_method="linear",
     >>>     exponent=-2,
     >>>     sigmoid=False)
@@ -1285,19 +1316,19 @@ class FrequencyNoiseAlpha(AlphaElementwise):
     without sharp edges.
 
     >>> aug = iaa.FrequencyNoiseAlpha(
-    >>>     first=iaa.EdgeDetect(1.0),
+    >>>     foreground=iaa.EdgeDetect(1.0),
     >>>     sigmoid_thresh=iap.Normal(10.0, 5.0))
 
     Same as the first example, but using a threshold for the sigmoid function
     that is further to the right. This is more conservative, i.e. the generated
     noise masks will be mostly black (values around ``0.0``), which means that
-    most of the original images (parameter/branch `second`) will be kept,
+    most of the original images (parameter/branch `background`) will be kept,
     rather than using the results of the augmentation (parameter/branch
-    `first`).
+    `foreground`).
 
     """
 
-    def __init__(self, exponent=(-4, 4), first=None, second=None,
+    def __init__(self, exponent=(-4, 4), foreground=None, background=None,
                  per_channel=False, size_px_max=(4, 16), upscale_method=None,
                  iterations=(1, 3), aggregation_method=["avg", "max"],
                  sigmoid=0.5, sigmoid_thresh=None,
@@ -1335,7 +1366,8 @@ class FrequencyNoiseAlpha(AlphaElementwise):
             )
 
         super(FrequencyNoiseAlpha, self).__init__(
-            factor=noise, first=first, second=second, per_channel=per_channel,
+            factor=noise, foreground=foreground, background=background,
+            per_channel=per_channel,
             name=name, deterministic=deterministic, random_state=random_state
         )
 
