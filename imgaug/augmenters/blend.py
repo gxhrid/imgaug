@@ -1922,7 +1922,7 @@ class _LinearGradientMaskGen(IBatchwiseMaskGenerator):
                            stop=max_value,
                            num=end_at_px - start_at_px,
                            dtype=np.float32)
-        after_grad = np.full((width - end_at_px,), max_value,
+        after_grad = np.full((axis_size - end_at_px,), max_value,
                              dtype=np.float32)
 
         mask = np.concatenate((
@@ -1961,7 +1961,7 @@ class HorizontalLinearGradientMaskGen(_LinearGradientMaskGen):
     Parameters
     ----------
     min_value : number or tuple of number or list of number or imgaug.parameters.StochasticParameter, optional
-        Minimum value that will mask will have up to the start point of the
+        Minimum value that the mask will have up to the start point of the
         linear gradient.
         Note that `min_value` is allowed to be larger than `max_value`,
         in which case the gradient will start at the (higher) `min_value`
@@ -1975,21 +1975,23 @@ class HorizontalLinearGradientMaskGen(_LinearGradientMaskGen):
           per batch for ``(N,)`` values -- one per image.
 
     max_value : number or tuple of number or list of number or imgaug.parameters.StochasticParameter, optional
-        Maximum value that will mask will have at the end of the
+        Maximum value that the mask will have at the end of the
         linear gradient.
 
         Datatypes are analogous to `min_value`.
 
     start_at : number or tuple of number or list of number or imgaug.parameters.StochasticParameter, optional
         Position on the x-axis where the linear gradient starts, given as a
-        fraction of the axis size. Interval is ``[0.0, 1.0]``.
+        fraction of the axis size. Interval is ``[0.0, 1.0]``, where ``0.0``
+        is at the left of the image.
         If ``end_at < start_at`` the gradient will be inverted.
 
         Datatypes are analogous to `min_value`.
 
     end_at : number or tuple of number or list of number or imgaug.parameters.StochasticParameter, optional
         Position on the x-axis where the linear gradient ends, given as a
-        fraction of the axis size. Interval is ``[0.0, 1.0]``.
+        fraction of the axis size. Interval is ``[0.0, 1.0]``, where ``0.0``
+        is at the right of the image.
 
         Datatypes are analogous to `min_value`.
 
@@ -2036,6 +2038,99 @@ class HorizontalLinearGradientMaskGen(_LinearGradientMaskGen):
         """
         return cls._generate_mask(
             axis=1,
+            shape=shape,
+            min_value=min_value,
+            max_value=max_value,
+            start_at=start_at,
+            end_at=end_at)
+
+
+class VerticalLinearGradientMaskGen(_LinearGradientMaskGen):
+    """Generator that produces vertical linear gradient masks.
+
+    See :class:`imgaug.augmenters.blend.HorizontalLinearGradientMaskGen`
+    for details.
+
+    Parameters
+    ----------
+    min_value : number or tuple of number or list of number or imgaug.parameters.StochasticParameter, optional
+        Minimum value that the mask will have up to the start point of the
+        linear gradient.
+        Note that `min_value` is allowed to be larger than `max_value`,
+        in which case the gradient will start at the (higher) `min_value`
+        and decrease towards the (lower) `max_value`.
+
+        * If ``number``: Exactly that value will be used for all images.
+        * If ``tuple`` ``(a, b)``: A random value will be uniformly sampled
+          per image from the interval ``[a, b]``.
+        * If ``list``: A random value will be picked per image from that list.
+        * If ``StochasticParameter``: That parameter will be queried once
+          per batch for ``(N,)`` values -- one per image.
+
+    max_value : number or tuple of number or list of number or imgaug.parameters.StochasticParameter, optional
+        Maximum value that the mask will have at the end of the
+        linear gradient.
+
+        Datatypes are analogous to `min_value`.
+
+    start_at : number or tuple of number or list of number or imgaug.parameters.StochasticParameter, optional
+        Position on the y-axis where the linear gradient starts, given as a
+        fraction of the axis size. Interval is ``[0.0, 1.0]``, where ``0.0``
+        is at the top of the image.
+        If ``end_at < start_at`` the gradient will be inverted.
+
+        Datatypes are analogous to `min_value`.
+
+    end_at : number or tuple of number or list of number or imgaug.parameters.StochasticParameter, optional
+        Position on the x-axis where the linear gradient ends, given as a
+        fraction of the axis size. Interval is ``[0.0, 1.0]``, where ``1.0``
+        is at the bottom of the image.
+
+        Datatypes are analogous to `min_value`.
+
+    """
+    def __init__(self, min_value=0.0, max_value=1.0,
+                 start_at=0.0, end_at=1.0):
+        super(VerticalLinearGradientMaskGen, self).__init__(
+            axis=0,
+            min_value=min_value,
+            max_value=max_value,
+            start_at=start_at,
+            end_at=end_at)
+
+    @classmethod
+    def generate_mask(cls, shape, min_value, max_value, start_at, end_at):
+        """Generate a linear horizontal gradient mask.
+
+        Parameters
+        ----------
+        shape : tuple of int
+            Shape of the image. The mask will have the same height and
+            width.
+
+        min_value : number
+            Minimum value of the gradient in interval ``[0.0, 1.0]``.
+
+        max_value : number
+            Maximum value of the gradient in interval ``[0.0, 1.0]``.
+
+        start_at : number
+            Position on the x-axis where the linear gradient starts, given as
+            a fraction of the axis size. Interval is ``[0.0, 1.0]``.
+
+        end_at : number
+            Position on the x-axis where the linear gradient ends, given as
+            a fraction of the axis size. Interval is ``[0.0, 1.0]``.
+
+        Returns
+        -------
+        ndarray
+            ``float32`` mask array with same height and width as the image.
+            Values are in ``[0.0, 1.0]``.
+
+        """
+        return cls._generate_mask(
+            axis=0,
             shape=shape,
             min_value=min_value,
             max_value=max_value,

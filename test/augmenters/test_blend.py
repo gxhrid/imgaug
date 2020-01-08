@@ -2190,6 +2190,7 @@ class TestHorizontalLinearGradientMaskGen(unittest.TestCase):
                                                   max_value=1.0,
                                                   start_at=0.1,
                                                   end_at=0.9)
+        assert gen.axis == 1
         assert np.isclose(gen.min_value.value, 0.1)
         assert np.isclose(gen.max_value.value, 1.0)
         assert np.isclose(gen.start_at.value, 0.1)
@@ -2300,6 +2301,55 @@ class TestHorizontalLinearGradientMaskGen(unittest.TestCase):
         mask = gen.draw_masks(batch)[0]
         assert np.allclose(mask[:, 0:5], 0.25)
         assert np.allclose(mask[:, 5:], 0.75)
+
+
+class TestHorizontalLinearGradientMaskGen(unittest.TestCase):
+    def setUp(self):
+        reseed()
+
+    def test___init__(self):
+        gen = iaa.VerticalLinearGradientMaskGen(min_value=0.1,
+                                                max_value=1.0,
+                                                start_at=0.1,
+                                                end_at=0.9)
+        assert gen.axis == 0
+        assert np.isclose(gen.min_value.value, 0.1)
+        assert np.isclose(gen.max_value.value, 1.0)
+        assert np.isclose(gen.start_at.value, 0.1)
+        assert np.isclose(gen.end_at.value, 0.9)
+
+    def test_draw_masks(self):
+        # we transpose the axes in this test, because that way the test is
+        # essentially identical to the one for HorizontalLinearGradientMaskGen
+        image1 = np.zeros((5, 100, 3), dtype=np.uint8)
+        image2 = np.zeros((7, 200, 3), dtype=np.uint8)
+        image1 = image1.transpose((1, 0, 2))
+        image2 = image2.transpose((1, 0, 2))
+        batch = ia.BatchInAugmentation(images=[image1, image2])
+
+        gen = iaa.VerticalLinearGradientMaskGen(min_value=0.1,
+                                                max_value=0.75,
+                                                start_at=0.1,
+                                                end_at=0.9)
+
+        masks = gen.draw_masks(batch, random_state=1)
+
+        image1 = image1.transpose((1, 0, 2))
+        image2 = image2.transpose((1, 0, 2))
+        masks[0] = masks[0].transpose((1, 0))
+        masks[1] = masks[1].transpose((1, 0))
+        assert masks[0].shape == image1.shape[0:2]
+        assert masks[1].shape == image2.shape[0:2]
+        assert masks[0].dtype.name == "float32"
+        assert masks[1].dtype.name == "float32"
+        assert np.allclose(masks[0][:, 0:10], 0.1)
+        assert np.allclose(masks[1][:, 0:20], 0.1)
+        assert np.allclose(masks[0][:, 90:], 0.75)
+        assert np.allclose(masks[1][:, 180:], 0.75)
+        assert np.allclose(masks[0][:, 10+40], 0.1 + 0.5 * (0.75 - 0.1),
+                           rtol=0, atol=0.05)
+        assert np.allclose(masks[1][:, 20+80], 0.1 + 0.5 * (0.75 - 0.1),
+                           rtol=0, atol=0.025)
 
 
 class TestSimplexNoiseAlpha(unittest.TestCase):
