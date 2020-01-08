@@ -1733,6 +1733,70 @@ class TestBlendAlphaElementwise(unittest.TestCase):
         runtest_pickleable_uint8_img(aug, iterations=3)
 
 
+class TestBlendAlphaSomeColors(unittest.TestCase):
+    def setUp(self):
+        reseed()
+
+    def test___init__(self):
+        child1 = iaa.Sequential([])
+        child2 = iaa.Sequential([])
+        aug = iaa.BlendAlphaSomeColors(child1, child2)
+        assert aug.foreground is child1
+        assert aug.background is child2
+        assert isinstance(aug.mask_generator, iaa.SomeColorsMaskGen)
+
+    def test_grayscale_drops_different_colors(self):
+        image = np.uint8([
+            [255, 0, 0],
+            [0, 255, 0],
+            [0, 0, 255],
+            [255, 255, 0],
+            [255, 0, 255],
+            [0, 255, 255],
+            [255, 128, 128],
+            [128, 255, 128],
+            [128, 128, 255]
+        ]).reshape((1, 9, 3))
+        image_gray = iaa.Grayscale(1.0)(image=image)
+        aug = iaa.BlendAlphaSomeColors(iaa.Grayscale(1.0),
+                                       nb_bins=256, smoothness=0)
+
+        nb_grayscaled = []
+        for _ in sm.xrange(50):
+            image_aug = aug(image=image)
+            grayscaled = np.sum((image_aug == image_gray).astype(np.int32),
+                                axis=2)
+            assert np.all(np.logical_or(grayscaled == 0, grayscaled == 3))
+            nb_grayscaled.append(np.sum(grayscaled == 3))
+
+        assert len(set(nb_grayscaled)) >= 5
+
+    def test_zero_sized_axes(self):
+        shapes = [
+            (0, 0, 3),
+            (0, 1, 3),
+            (1, 0, 3)
+        ]
+
+        for shape in shapes:
+            with self.subTest(shape=shape):
+                image = np.full(shape, 0, dtype=np.uint8)
+                aug = iaa.BlendAlphaSomeColors(iaa.Add(1), iaa.Add(100))
+
+                image_aug = aug(image=image)
+
+                assert np.all(image_aug == 1)
+                assert image_aug.dtype.name == "uint8"
+                assert image_aug.shape == shape
+
+    def test_pickleable(self):
+        aug = iaa.BlendAlphaSomeColors(
+            iaa.Add((1, 10), random_state=1),
+            iaa.Add((11, 20), random_state=2),
+            random_state=3)
+        runtest_pickleable_uint8_img(aug, iterations=3)
+
+
 class TestStochasticParameterMaskGen(unittest.TestCase):
     def _test_draw_masks_nhwc(self, shape):
         batch = ia.BatchInAugmentation(

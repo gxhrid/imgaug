@@ -24,5 +24,6 @@
 * Renamed arguments `first` and `second` to `foreground` and `background`
   in `BlendAlpha`, `BlendAlphaElementwise`, `BlendAlphaSimplexNoise` and
   `BlendAlphaFrequencyNoise`.
+* Added `imgaug.augmenters.blend.BlendAlphaSomeColors`.
 * Fixed a wrong error message in
   `imgaug.augmenters.color.change_colorspace_()`.

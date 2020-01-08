@@ -8,6 +8,7 @@ List of augmenters:
     * BlendAlphaElementwise
     * BlendAlphaSimplexNoise
     * BlendAlphaFrequencyNoise
+    * BlendAlphaSomeColors
 
 """
 from __future__ import print_function, division, absolute_import
@@ -1328,6 +1329,134 @@ class BlendAlphaFrequencyNoise(BlendAlphaElementwise):
         )
 
 
+class BlendAlphaSomeColors(BlendAlphaMask):
+    """Blend images from two branches using colorwise masks.
+
+    This class generates masks that "mark" a few colors and replace the
+    pixels within these colors with the results of the foreground branch.
+    The remaining pixels are replaced with the results of the background
+    branch (usually the identity function). That allows to e.g. selectively
+    grayscale a few colors, while keeping other colors unchanged.
+
+    This class is a thin wrapper around
+    :class:`imgaug.augmenters.blend.BlendAlphaMask` together with
+    :class:`imgaug.augmenters.blend.SomeColorsMaskGen`.
+
+    .. note::
+
+        The underlying mask generator will produce an ``AssertionError`` for
+        batches that contain no images.
+
+    .. note::
+
+        Avoid using augmenters as children that affect pixel locations (e.g.
+        horizontal flips). See
+        :class:`imgaug.augmenters.blend.BlendAlphaMask` for details.
+
+    dtype support::
+
+        See :func:`imgaug.augmenters.color.change_colorspaces_`.
+
+    Parameters
+    ----------
+    foreground : None or imgaug.augmenters.meta.Augmenter or iterable of imgaug.augmenters.meta.Augmenter, optional
+        Augmenter(s) that make up the foreground branch.
+        High alpha values will show this branch's results.
+
+            * If ``None``, then the input images will be reused as the output
+              of the foreground branch.
+            * If ``Augmenter``, then that augmenter will be used as the branch.
+            * If iterable of ``Augmenter``, then that iterable will be
+              converted into a ``Sequential`` and used as the augmenter.
+
+    background : None or imgaug.augmenters.meta.Augmenter or iterable of imgaug.augmenters.meta.Augmenter, optional
+        Augmenter(s) that make up the background branch.
+        Low alpha values will show this branch's results.
+
+            * If ``None``, then the input images will be reused as the output
+              of the background branch.
+            * If ``Augmenter``, then that augmenter will be used as the branch.
+            * If iterable of ``Augmenter``, then that iterable will be
+              converted into a ``Sequential`` and used as the augmenter.
+
+    nb_bins : int or tuple of int or list of int or imgaug.parameters.StochasticParameter, optional
+        See :class:`imgaug.augmenters.blend.SomeColorsMaskGen`.
+
+    smoothness : number or tuple of number or list of number or imgaug.parameters.StochasticParameter, optional
+        See :class:`imgaug.augmenters.blend.SomeColorsMaskGen`.
+
+    alpha : number or tuple of number or list of number or imgaug.parameters.StochasticParameter, optional
+        See :class:`imgaug.augmenters.blend.SomeColorsMaskGen`.
+
+    rotation_deg : number or tuple of number or list of number or imgaug.parameters.StochasticParameter, optional
+        See :class:`imgaug.augmenters.blend.SomeColorsMaskGen`.
+
+    from_colorspace : str, optional
+        See :class:`imgaug.augmenters.blend.SomeColorsMaskGen`.
+
+    Examples
+    --------
+    >>> import imgaug.augmenters as iaa
+    >>> aug = iaa.BlendAlphaSomeColors(iaa.Grayscale(1.0))
+
+    Create an augmenter that turns randomly removes some colors in images by
+    grayscaling them.
+
+    >>> aug = iaa.BlendAlphaSomeColors(iaa.TotalDropout(1.0))
+
+    Create an augmenter that removes some colors in images by replacing them
+    with black pixels.
+
+    >>> aug = iaa.BlendAlphaSomeColors(
+    >>>     iaa.MultiplySaturation(0.5), iaa.MultiplySaturation(1.5))
+
+    Create an augmenter that desaturates some colors and increases the
+    saturation of the remaining ones.
+
+    >>> aug = iaa.BlendAlphaSomeColors(
+    >>>     iaa.AveragePooling(7), alpha=[0.0, 1.0], smoothness=0.0)
+
+    Create an augmenter that applies average pooling to some colors.
+    Each color tune is either selected (alpha of ``1.0``) or not
+    selected (``0.0``). There is no gradual change between similar colors.
+
+    >>> aug = iaa.BlendAlphaSomeColors(
+    >>>     iaa.AveragePooling(7), nb_bins=2, smoothness=0.0)
+
+    Create an augmenter that applies average pooling to some colors.
+    Choose on average half of all colors in images for the blending operation.
+
+    >>> aug = iaa.BlendAlphaSomeColors(
+    >>>     iaa.AveragePooling(7), from_colorspace="BGR")
+
+    Create an augmenter that applies average pooling to some colors with
+    input images being in BGR colorspace.
+
+    """
+
+    def __init__(self, foreground=None, background=None,
+                 nb_bins=(5, 15), smoothness=(0.1, 0.3),
+                 alpha=[0.0, 1.0], rotation_deg=(0, 360),
+                 from_colorspace="RGB",
+                 name=None, deterministic=False, random_state=None):
+        super(BlendAlphaSomeColors, self).__init__(
+            SomeColorsMaskGen(
+                nb_bins=nb_bins,
+                smoothness=smoothness,
+                alpha=alpha,
+                rotation_deg=rotation_deg,
+                from_colorspace=from_colorspace
+            ),
+            foreground=foreground,
+            background=background,
+            name=name,
+            deterministic=deterministic,
+            random_state=random_state
+        )
+
+
+
+
 @six.add_metaclass(ABCMeta)
 class IBatchwiseMaskGenerator(object):
     """Interface for classes generating masks for batches.
@@ -1541,8 +1670,7 @@ class SomeColorsMaskGen(IBatchwiseMaskGenerator):
     # TODO colorlib.CSPACE_RGB produces 'has no attribute' error?
     def __init__(self, nb_bins=(5, 15), smoothness=(0.1, 0.3),
                  alpha=[0.0, 1.0], rotation_deg=(0, 360),
-                 from_colorspace="RGB",
-                 name=None, deterministic=False, random_state=None):
+                 from_colorspace="RGB"):
         super(SomeColorsMaskGen, self).__init__()
 
         self.nb_bins = iap.handle_discrete_param(
