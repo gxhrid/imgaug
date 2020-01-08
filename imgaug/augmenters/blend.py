@@ -1848,6 +1848,173 @@ class SomeColorsMaskGen(IBatchwiseMaskGenerator):
         return mask.astype(np.float32) / 255.0
 
 
+class HorizontalLinearGradientMaskGen(IBatchwiseMaskGenerator):
+    """Generator that produces horizontal linear gradient masks.
+
+    This class receives batches and produces for each row (i.e. image)
+    a horizontal linear gradient that matches the row's shape (i.e. image
+    shape). The gradient increases linearly from a minimum value to a
+    maximum value along the x-axis. The start and end points (i.e. where the
+    minimum value starts to increase and where it reaches the maximum)
+    may be defines as fractions of the width. E.g. for width ``100`` and
+    ``start=0.25``, ``end=0.75``, the gradient would have its minimum
+    in interval ``[0px, 25px]`` and its maximum in interval ``[75px, 100px]``.
+
+    Note that this has nothing to do with a *derivative* along the x-axis.
+
+    Parameters
+    ----------
+    min_value : number or tuple of number or list of number or imgaug.parameters.StochasticParameter, optional
+        Minimum value that will mask will have up to the start point of the
+        linear gradient.
+        Note that `min_value` is allowed to be larger than `max_value`,
+        in which case the gradient will start at the (higher) `min_value`
+        and decrease towards the (lower) `max_value`.
+
+        * If ``number``: Exactly that value will be used for all images.
+        * If ``tuple`` ``(a, b)``: A random value will be uniformly sampled
+          per image from the interval ``[a, b]``.
+        * If ``list``: A random value will be picked per image from that list.
+        * If ``StochasticParameter``: That parameter will be queried once
+          per batch for ``(N,)`` values -- one per image.
+
+    max_value : number or tuple of number or list of number or imgaug.parameters.StochasticParameter, optional
+        Maximum value that will mask will have at the end of the
+        linear gradient.
+
+        Datatypes are analogous to `min_value`.
+
+    start_at : number or tuple of number or list of number or imgaug.parameters.StochasticParameter, optional
+        Position on the x-axis where the linear gradient starts, given as a
+        fraction of the axis size. Interval is ``[0.0, 1.0]``.
+        If ``end_at < start_at`` the gradient will be inverted.
+
+        Datatypes are analogous to `min_value`.
+
+    end_at : number or tuple of number or list of number or imgaug.parameters.StochasticParameter, optional
+        Position on the x-axis where the linear gradient ends, given as a
+        fraction of the axis size. Interval is ``[0.0, 1.0]``.
+
+        Datatypes are analogous to `min_value`.
+
+    """
+    def __init__(self, min_value=0.0, max_value=1.0,
+                 start_at=0.0, end_at=1.0):
+        self.min_value = iap.handle_continuous_param(
+            min_value, "min_value", value_range=(0.0, 1.0),
+            tuple_to_uniform=True, list_to_choice=True)
+        self.max_value = iap.handle_continuous_param(
+            max_value, "max_value", value_range=(0.0, 1.0),
+            tuple_to_uniform=True, list_to_choice=True)
+        self.start_at = iap.handle_continuous_param(
+            start_at, "start_at", value_range=(0.0, 1.0),
+            tuple_to_uniform=True, list_to_choice=True)
+        self.end_at = iap.handle_continuous_param(
+            end_at, "end_at", value_range=(0.0, 1.0),
+            tuple_to_uniform=True, list_to_choice=True)
+
+    def draw_masks(self, batch, random_state=None):
+        """
+        See :func:`imgaug.augmenters.blend.IBatchwiseMaskGenerator.draw_masks`.
+
+        """
+        random_state = iarandom.RNG(random_state)
+        shapes = batch.get_rowwise_shapes()
+        samples = self._draw_samples(len(shapes), random_state=random_state)
+
+        return [self._draw_mask(shape, i, samples)
+                for i, shape
+                in enumerate(shapes)]
+
+    def _draw_mask(self, shape, image_idx, samples):
+        return self.generate_mask(
+            shape,
+            samples[0][image_idx],
+            samples[1][image_idx],
+            samples[2][image_idx],
+            samples[3][image_idx])
+
+    def _draw_samples(self, nb_rows, random_state):
+        min_value = self.min_value.draw_samples((nb_rows,),
+                                                random_state=random_state)
+        max_value = self.max_value.draw_samples((nb_rows,),
+                                                random_state=random_state)
+        start_at = self.start_at.draw_samples(
+            (nb_rows,), random_state=random_state)
+        end_at = self.end_at.draw_samples(
+            (nb_rows,), random_state=random_state)
+
+        return min_value, max_value, start_at, end_at
+
+    @classmethod
+    def generate_mask(cls, shape, min_value, max_value, start_at, end_at):
+        """Generate a linear horizontal gradient mask.
+
+        Parameters
+        ----------
+        shape : tuple of int
+            Shape of the image. The mask will have the same height and
+            width.
+
+        min_value : number
+            Minimum value of the gradient in interval ``[0.0, 1.0]``.
+
+        max_value : number
+            Maximum value of the gradient in interval ``[0.0, 1.0]``.
+
+        start_at : number
+            Position on the x-axis where the linear gradient starts, given as
+            a fraction of the axis size. Interval is ``[0.0, 1.0]``.
+
+        end_at : number
+            Position on the x-axis where the linear gradient ends, given as
+            a fraction of the axis size. Interval is ``[0.0, 1.0]``.
+
+        Returns
+        -------
+        ndarray
+            ``float32`` mask array with same height and width as the image.
+            Values are in ``[0.0, 1.0]``.
+
+        """
+        height, width = shape[0:2]
+
+        min_value = min(max(min_value, 0.0), 1.0)
+        max_value = min(max(max_value, 0.0), 1.0)
+
+        start_at_px = int(start_at * width)
+        start_at_px = min(max(int(start_at * width), 0), width)
+        end_at_px = min(max(int(end_at * width), 0), width)
+
+        inverted = False
+        if end_at_px < start_at_px:
+            inverted = True
+            start_at_px, end_at_px = end_at_px, start_at_px
+
+        left_of_grad = np.full((1, start_at_px), min_value,
+                               dtype=np.float32)
+        grad = np.linspace(start=min_value,
+                           stop=max_value,
+                           num=end_at_px - start_at_px,
+                           dtype=np.float32)
+        grad = grad[np.newaxis, :]
+        right_of_grad = np.full((1, width - end_at_px), max_value,
+                                dtype=np.float32)
+
+        mask = np.concatenate((
+            left_of_grad,
+            grad,
+            right_of_grad
+        ), axis=1)
+
+        if inverted:
+            mask = 1.0 - mask
+
+        mask = np.tile(mask, (height, 1))
+
+        return mask
+
+
 @ia.deprecated(alt_func="Alpha",
                comment="Alpha is deprecated. "
                        "Use BlendAlpha instead. "

@@ -2181,6 +2181,127 @@ class TestSomeColorsMaskGen(unittest.TestCase):
             _masks = gen.draw_masks(batch)
 
 
+class TestHorizontalLinearGradientMaskGen(unittest.TestCase):
+    def setUp(self):
+        reseed()
+
+    def test___init__(self):
+        gen = iaa.HorizontalLinearGradientMaskGen(min_value=0.1,
+                                                  max_value=1.0,
+                                                  start_at=0.1,
+                                                  end_at=0.9)
+        assert np.isclose(gen.min_value.value, 0.1)
+        assert np.isclose(gen.max_value.value, 1.0)
+        assert np.isclose(gen.start_at.value, 0.1)
+        assert np.isclose(gen.end_at.value, 0.9)
+
+    def test_draw_masks(self):
+        image1 = np.zeros((5, 100, 3), dtype=np.uint8)
+        image2 = np.zeros((7, 200, 3), dtype=np.uint8)
+        batch = ia.BatchInAugmentation(images=[image1, image2])
+
+        gen = iaa.HorizontalLinearGradientMaskGen(min_value=0.1,
+                                                  max_value=0.75,
+                                                  start_at=0.1,
+                                                  end_at=0.9)
+
+        masks = gen.draw_masks(batch, random_state=1)
+
+        assert masks[0].shape == image1.shape[0:2]
+        assert masks[1].shape == image2.shape[0:2]
+        assert masks[0].dtype.name == "float32"
+        assert masks[1].dtype.name == "float32"
+        assert np.allclose(masks[0][:, 0:10], 0.1)
+        assert np.allclose(masks[1][:, 0:20], 0.1)
+        assert np.allclose(masks[0][:, 90:], 0.75)
+        assert np.allclose(masks[1][:, 180:], 0.75)
+        assert np.allclose(masks[0][:, 10+40], 0.1 + 0.5 * (0.75 - 0.1),
+                           rtol=0, atol=0.05)
+        assert np.allclose(masks[1][:, 20+80], 0.1 + 0.5 * (0.75 - 0.1),
+                           rtol=0, atol=0.025)
+
+    def test_generate_mask__min_value_below_max_value(self):
+        mask = iaa.HorizontalLinearGradientMaskGen.generate_mask(
+            (1, 100, 3), min_value=0.75, max_value=0.25,
+            start_at=0.0, end_at=1.0)
+
+        assert mask.shape == (1, 100)
+        assert np.isclose(mask[0, 0], 0.75)
+        assert np.isclose(mask[0, -1], 0.25)
+        assert np.isclose(mask[0, 50], 0.25 + 0.5 * (0.75 - 0.25),
+                          rtol=0, atol=0.05)
+
+    def test_generate_mask__end_at_is_before_start_at(self):
+        mask = iaa.HorizontalLinearGradientMaskGen.generate_mask(
+            (1, 100, 3), min_value=0.25, max_value=0.75,
+            start_at=1.0, end_at=0.0)
+
+        # like test_generate_mask__min_value_below_max_value(),
+        # because end < start leads to inversion and we also inverted the
+        # min and max value above
+        assert mask.shape == (1, 100)
+        assert np.isclose(mask[0, 0], 0.75)
+        assert np.isclose(mask[0, -1], 0.25)
+        assert np.isclose(mask[0, 50], 0.25 + 0.5 * (0.75 - 0.25),
+                          rtol=0, atol=0.05)
+
+    def test_generate_mask__start_at_is_end_at(self):
+        mask = iaa.HorizontalLinearGradientMaskGen.generate_mask(
+            (1, 100, 3), min_value=0.0, max_value=1.0,
+            start_at=0.5, end_at=0.5)
+
+        assert mask.shape == (1, 100)
+        assert np.allclose(mask[:, 0:50], 0.0)
+        assert np.allclose(mask[:, 50:], 1.0)
+
+    def test_generate_mask__min_value_is_max_value(self):
+        mask = iaa.HorizontalLinearGradientMaskGen.generate_mask(
+            (1, 100, 3), min_value=0.5, max_value=0.5,
+            start_at=0.1, end_at=0.8)
+
+        assert mask.shape == (1, 100)
+        assert np.allclose(mask, 0.5)
+
+    def test_generate_mask__start_at_and_end_at_are_outside_of_image(self):
+        mask = iaa.HorizontalLinearGradientMaskGen.generate_mask(
+            (1, 100, 3), min_value=0.25, max_value=0.75,
+            start_at=-0.5, end_at=-0.1)
+
+        assert mask.shape == (1, 100)
+        assert np.allclose(mask, 0.75)
+
+    def test_zero_sized_axes(self):
+        shapes = [
+            (0, 0, 3),
+            (0, 1, 3),
+            (1, 0, 3)
+        ]
+
+        for shape in shapes:
+            with self.subTest(shape=shape):
+                image = np.zeros(shape, dtype=np.uint8)
+                batch = ia.BatchInAugmentation(images=[image])
+                gen = iaa.HorizontalLinearGradientMaskGen()
+
+                mask = gen.draw_masks(batch)[0]
+
+                assert mask.shape == shape[0:2]
+                assert mask.dtype.name == "float32"
+
+    def test_batch_contains_no_images(self):
+        hms = ia.HeatmapsOnImage(np.zeros((5, 5), dtype=np.float32),
+                                 shape=(10, 10, 3))
+        batch = ia.BatchInAugmentation(heatmaps=[hms])
+        gen = iaa.HorizontalLinearGradientMaskGen(min_value=0.25,
+                                                  max_value=0.75,
+                                                  start_at=0.5,
+                                                  end_at=0.5)
+
+        mask = gen.draw_masks(batch)[0]
+        assert np.allclose(mask[:, 0:5], 0.25)
+        assert np.allclose(mask[:, 5:], 0.75)
+
+
 class TestSimplexNoiseAlpha(unittest.TestCase):
     def test_deprecation_warning(self):
         aug1 = iaa.Sequential([])
