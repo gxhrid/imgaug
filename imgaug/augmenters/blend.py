@@ -1448,10 +1448,27 @@ class SomeColorsMaskGen(IBatchwiseMaskGenerator):
     narrow the selection is (e.g. very specific blue tone or all blue-ish
     colors) is determined by the hyperparameters.
 
+    The color selection method performs roughly the following steps:
+
+      1. Split the full color range of the hue in ``HSV`` into ``nb_bins``
+         bins (i.e. ``256/nb_bins`` different possible hue tones).
+      2. Shift the bins by ``rotation_deg`` degrees. (This way, the ``0th``
+         bin does not always start at exactly ``0deg`` of hue.)
+      3. Sample ``alpha`` values for each bin.
+      4. Repeat the ``nb_bins`` bins until there are ``256`` bins.
+      5. Smoothen the alpha values of neighbouring bins using a gaussian
+         kernel. The kernel's ``sigma`` is derived from ``smoothness``.
+      6. Associate all hue values in the image with the corresponding bin's
+         alpha value. This results in the alpha mask.
+
     .. note::
 
         This mask generator will produce an ``AssertionError`` for batches
         that contain no images.
+
+    dtype support::
+
+        See :func:`imgaug.augmenters.color.change_colorspaces_`.
 
     Parameters
     ----------
