@@ -276,8 +276,8 @@ def change_colorspace_(image, to_colorspace, from_colorspace=CSPACE_RGB):
         "Expected image shape to be three-dimensional, i.e. (H,W,C), "
         "got %d dimensions with shape %s." % (image.ndim, image.shape))
     assert image.shape[2] == 3, (
-        "Expected number of channels to be three, got %d channels with "
-        "shape %s." % (image.ndim, image.shape,))
+        "Expected number of channels to be three, "
+        "got %d channels (shape %s)." % (image.shape[2], image.shape,))
 
     if from_colorspace == to_colorspace:
         return image
