@@ -7,6 +7,8 @@
   classes generating masks on a batch-by-batch basis.
 * Added `imgaug.augmenters.blend.StochasticParameterMaskGen`, a mask generator
   helper for `BlendAlphaMask`.
+* Added `imgaug.augmenters.blend.StochasticParameterMaskGen`, a colorwise
+  mask generator for `BlendAlphaMask`.
 * Changed `imgaug.parameters.SimplexNoise` and
   `imgaug.parameters.FrequencyNoise` to also accept `(H, W, C)` sampling
   shapes, instead of only `(H, W)`.

@@ -17,9 +17,11 @@ from abc import ABCMeta, abstractmethod
 import numpy as np
 import six
 import six.moves as sm
+import cv2
 
 import imgaug as ia
 from . import meta
+from . import color as colorlib
 from .. import parameters as iap
 from .. import dtypes as iadt
 from .. import random as iarandom
@@ -1434,6 +1436,271 @@ class StochasticParameterMaskGen(IBatchwiseMaskGenerator):
                     np.min(mask), np.max(mask),))
 
         return mask
+
+
+class SomeColorsMaskGen(IBatchwiseMaskGenerator):
+    """Generator that produces masks based on some similar colors in images.
+
+    This class receives batches for which to generate masks, iterates over
+    the batch rows (i.e. images) and generates one mask per row.
+    The mask contains high alpha values for some colors, while other colors
+    get low mask values. Which colors are chosen is random. How wide or
+    narrow the selection is (e.g. very specific blue tone or all blue-ish
+    colors) is determined by the hyperparameters.
+
+    .. note::
+
+        This mask generator will produce an ``AssertionError`` for batches
+        that contain no images.
+
+    Parameters
+    ----------
+    nb_bins : int or tuple of int or list of int or imgaug.parameters.StochasticParameter, optional
+        Number of bins. For ``B`` bins, each bin denotes roughly ``360/B``
+        degrees of colors in the hue channel. Lower values lead to a coarser
+        selection of colors. Expected value range is ``[2, 256]``.
+
+            * If ``int``: Exactly that value will be used for all images.
+            * If ``tuple`` ``(a, b)``: A random value will be uniformly sampled
+              per image from the discrete interval ``[a..b]``.
+            * If ``list``: A random value will be picked per image from that
+              list.
+            * If ``StochasticParameter``: That parameter will be queried once
+              per batch for ``(N,)`` values -- one per image.
+
+    smoothness : number or tuple of number or list of number or imgaug.parameters.StochasticParameter, optional
+        Strength of the 1D gaussian kernel applied to the sampled binwise
+        alpha values. Larger values will lead to more similar grayscaling of
+        neighbouring colors. Expected value range is ``[0.0, 1.0]``.
+
+            * If ``number``: Exactly that value will be used for all images.
+            * If ``tuple`` ``(a, b)``: A random value will be uniformly sampled
+              per image from the interval ``[a, b]``.
+            * If ``list``: A random value will be picked per image from that
+              list.
+            * If ``StochasticParameter``: That parameter will be queried once
+              per batch for ``(N,)`` values -- one per image.
+
+    alpha : number or tuple of number or list of number or imgaug.parameters.StochasticParameter, optional
+        Parameter to sample binwise alpha blending factors from. Expected
+        value range is ``[0.0, 1.0]``.  Note that the alpha values will be
+        smoothed between neighbouring bins. Hence, it is usually a good idea
+        to set this so that the probability distribution peaks are around
+        ``0.0`` and ``1.0``, e.g. via a list ``[0.0, 1.0]`` or a ``Beta``
+        distribution.
+        It is not recommended to set this to a deterministic value, otherwise
+        all bins and hence all pixels in the generated mask will have the
+        same value.
+
+            * If ``number``: Exactly that value will be used for all bins.
+            * If ``tuple`` ``(a, b)``: A random value will be uniformly sampled
+              per bin from the interval ``[a, b]``.
+            * If ``list``: A random value will be picked per bin from that list.
+            * If ``StochasticParameter``: That parameter will be queried once
+              per batch for ``(N*B,)`` values -- one per image and bin.
+
+    rotation_deg : number or tuple of number or list of number or imgaug.parameters.StochasticParameter, optional
+        Rotiational shift of each bin as a fraction of ``360`` degrees.
+        E.g. ``0.0`` will not shift any bins, while a value of ``0.5`` will
+        shift by around ``180`` degrees. This shift is mainly used so that
+        the ``0th`` bin does not always start at ``0deg``. Expected value
+        range is ``[-360, 360]``. This parameter can usually be kept at the
+        default value.
+
+            * If ``number``: Exactly that value will be used for all images.
+            * If ``tuple`` ``(a, b)``: A random value will be uniformly sampled
+              per image from the interval ``[a, b]``.
+            * If ``list``: A random value will be picked per image from that
+              list.
+            * If ``StochasticParameter``: That parameter will be queried once
+              per batch for ``(N,)`` values -- one per image.
+
+    from_colorspace : str, optional
+        The source colorspace (of the input images).
+        See :func:`imgaug.augmenters.color.change_colorspace_`.
+
+    """
+
+    # TODO colorlib.CSPACE_RGB produces 'has no attribute' error?
+    def __init__(self, nb_bins=(5, 15), smoothness=(0.1, 0.3),
+                 alpha=[0.0, 1.0], rotation_deg=(0, 360),
+                 from_colorspace="RGB",
+                 name=None, deterministic=False, random_state=None):
+        super(SomeColorsMaskGen, self).__init__()
+
+        self.nb_bins = iap.handle_discrete_param(
+            nb_bins, "nb_bins", value_range=(1, 256),
+            tuple_to_uniform=True, list_to_choice=True)
+        self.smoothness = iap.handle_continuous_param(
+            smoothness, "smoothness", value_range=(0.0, 1.0),
+            tuple_to_uniform=True, list_to_choice=True)
+        self.alpha = iap.handle_continuous_param(
+            alpha, "alpha", value_range=(0.0, 1.0),
+            tuple_to_uniform=True, list_to_choice=True)
+        self.rotation_deg = iap.handle_continuous_param(
+            rotation_deg, "rotation_deg", value_range=(-360, 360),
+            tuple_to_uniform=True, list_to_choice=True)
+        self.from_colorspace = from_colorspace
+
+        self.sigma_max = 10.0
+
+    def draw_masks(self, batch, random_state=None):
+        """
+        See :func:`imgaug.augmenters.blend.IBatchwiseMaskGenerator.draw_masks`.
+
+        """
+        assert batch.images is not None, (
+            "Can only generate masks for batches that contain images, but "
+            "got a batch without images.")
+        random_state = iarandom.RNG(random_state)
+        samples = self._draw_samples(batch, random_state=random_state)
+
+        return [self._draw_mask(image, i, samples)
+                for i, image
+                in enumerate(batch.images)]
+
+    def _draw_mask(self, image, image_idx, samples):
+        return self.generate_mask_from_image(
+            image,
+            samples[0][image_idx],
+            samples[1][image_idx] * self.sigma_max,
+            samples[2][image_idx],
+            self.from_colorspace)
+
+    def _draw_samples(self, batch, random_state):
+        nb_rows = batch.nb_rows
+        nb_bins = self.nb_bins.draw_samples((nb_rows,),
+                                            random_state=random_state)
+        smoothness = self.smoothness.draw_samples((nb_rows,),
+                                                  random_state=random_state)
+        alpha = self.alpha.draw_samples((np.sum(nb_bins),),
+                                        random_state=random_state)
+        rotation_deg = self.rotation_deg.draw_samples(
+            (nb_rows,), random_state=random_state)
+
+        nb_bins = np.clip(nb_bins, 1, 256)
+        smoothness = np.clip(smoothness, 0.0, 1.0)
+        alpha = np.clip(alpha, 0.0, 1.0)
+        rotation_bins = np.mod(
+            np.round(rotation_deg * (256/360)).astype(np.int32),
+            256)
+
+        binwise_alphas = []
+        nth_bin = 0
+        for nb_bins_i in nb_bins:
+            binwise_alphas.append(alpha[nth_bin:nth_bin+nb_bins_i])
+            nth_bin += nb_bins_i
+
+        return binwise_alphas, smoothness, rotation_bins
+
+    @classmethod
+    def generate_mask_from_image(cls, image, binwise_alphas, sigma,
+                                 rotation_bins, from_colorspace):
+        """Generate a colorwise alpha mask for a single image.
+
+        Parameters
+        ----------
+        image : ndarray
+            Image for which to generate the mask. Must have shape ``(H,W,3)``
+            in colorspace `from_colorspace`.
+
+        binwise_alphas : ndarray
+            Alpha values of shape ``(B,)`` with ``B`` in ``[1, 256]``
+            and values in interval ``[0.0, 1.0]``. Will be upscaled to
+            256 bins by simple repetition. Each bin represents ``1/256`` th
+            of the hue.
+
+        sigma : float
+            Sigma of the 1D gaussian kernel applied to the upscaled binwise
+            alpha value array.
+
+        rotation_bins : int
+            By how much to rotate the 256 bin alpha array. The rotation is
+            given in number of bins.
+
+        from_colorspace : str
+            Colorspace of the input image. One of
+            ``imgaug.augmenters.color.CSPACE_*``.
+
+        Returns
+        -------
+        ndarray
+            ``float32`` mask array of shape ``(H, W)`` with values in
+            ``[0.0, 1.0]``
+
+        """
+        image_hsv = colorlib.change_colorspace_(
+            np.copy(image),
+            to_colorspace=colorlib.CSPACE_HSV,
+            from_colorspace=from_colorspace)
+
+        if 0 in image_hsv.shape[0:2]:
+            return np.zeros(image_hsv.shape[0:2], dtype=np.float32)
+
+        binwise_alphas = cls._upscale_to_256_alpha_bins(binwise_alphas)
+        binwise_alphas = cls._rotate_alpha_bins(binwise_alphas, rotation_bins)
+        binwise_alphas_smooth = cls._smoothen_alphas(binwise_alphas, sigma)
+
+        mask = cls._generate_pixelwise_alpha_mask(image_hsv,
+                                                  binwise_alphas_smooth)
+
+        return mask
+
+    @classmethod
+    def _upscale_to_256_alpha_bins(cls, alphas):
+        # repeat alphas bins so that B sampled bins become 256 bins
+        nb_bins = len(alphas)
+        nb_repeats_per_bin = int(np.ceil(256/nb_bins))
+        alphas = np.repeat(alphas, (nb_repeats_per_bin,))
+        alphas = alphas[0:256]
+        return alphas
+
+    @classmethod
+    def _rotate_alpha_bins(cls, alphas, rotation_bins):
+        # e.g. for offset 2: abcdef -> cdefab
+        # note: offset here is expected to be in [0, 256]
+        if rotation_bins > 0:
+            alphas = np.roll(alphas, -rotation_bins)
+        return alphas
+
+    @classmethod
+    def _smoothen_alphas(cls, alphas, sigma):
+        if sigma <= 0.0+1e-2:
+            return alphas
+
+        ksize = max(int(sigma * 2.5), 3)
+        ksize_y, ksize_x = (1, ksize)
+        if ksize_x % 2 == 0:
+            ksize_x += 1
+
+        # we fake here cv2.BORDER_WRAP, because GaussianBlur does not
+        # support that mode, i.e. we want:
+        #   cdefgh|abcdefgh|abcdefg
+        alphas = np.concatenate([
+            alphas[-ksize_x:],
+            alphas,
+            alphas[:ksize_x],
+        ])
+
+        alphas = cv2.GaussianBlur(
+            alphas[np.newaxis, :],
+            ksize=(ksize_x, ksize_y),
+            sigmaX=sigma, sigmaY=sigma,
+            borderType=cv2.BORDER_REPLICATE
+        )[0, :]
+
+        # revert fake BORDER_WRAP
+        alphas = alphas[ksize_x:-ksize_x]
+
+        return alphas
+
+    @classmethod
+    def _generate_pixelwise_alpha_mask(cls, image_hsv, hue_to_alpha):
+        hue = image_hsv[:, :, 0]
+        table = hue_to_alpha * 255
+        table = np.clip(np.round(table), 0, 255).astype(np.uint8)
+        mask = ia.apply_lut(hue, table)
+        return mask.astype(np.float32) / 255.0
 
 
 @ia.deprecated(alt_func="Alpha",

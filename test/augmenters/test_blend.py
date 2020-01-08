@@ -1838,6 +1838,285 @@ class TestStochasticParameterMaskGen(unittest.TestCase):
                         assert masks[0].shape == shape
 
 
+class TestSomeColorsMaskGen(unittest.TestCase):
+    def test___init___defaults(self):
+        gen = iaa.SomeColorsMaskGen()
+        assert np.isclose(gen.nb_bins.a.value, 5)
+        assert np.isclose(gen.nb_bins.b.value, 15)
+        assert np.isclose(gen.smoothness.a.value, 0.1)
+        assert np.isclose(gen.smoothness.b.value, 0.3)
+        assert np.isclose(gen.alpha.a[0], 0.0)
+        assert np.isclose(gen.alpha.a[1], 1.0)
+        assert np.isclose(gen.rotation_deg.a.value, 0)
+        assert np.isclose(gen.rotation_deg.b.value, 360)
+        assert gen.from_colorspace == iaa.CSPACE_RGB
+
+    def test___init___custom_settings(self):
+        gen = iaa.SomeColorsMaskGen(
+            nb_bins=100,
+            smoothness=0.5,
+            alpha=0.7,
+            rotation_deg=123,
+            from_colorspace=iaa.CSPACE_HSV
+        )
+        assert gen.nb_bins.value == 100
+        assert np.isclose(gen.smoothness.value, 0.5)
+        assert np.isclose(gen.alpha.value, 0.7)
+        assert np.isclose(gen.rotation_deg.value, 123)
+        assert gen.from_colorspace == iaa.CSPACE_HSV
+
+    def test_draw_masks_marks_different_colors(self):
+        image = np.uint8([
+            [255, 0, 0],
+            [0, 255, 0],
+            [0, 0, 255],
+            [255, 255, 0],
+            [255, 0, 255],
+            [0, 255, 255],
+            [255, 128, 128],
+            [128, 255, 128],
+            [128, 128, 255]
+        ]).reshape((9, 1, 3))
+        image = np.tile(image, (9, 50, 1))
+        batch = ia.BatchInAugmentation(images=[image])
+        gen = iaa.SomeColorsMaskGen(nb_bins=256, smoothness=0,
+                                    alpha=[0, 1])
+        expected_mask_sums = np.arange(1 + image.shape[0]) * image.shape[1]
+        expected_mask_sums = expected_mask_sums.astype(np.float32)
+
+        mask_sums = []
+        for i in sm.xrange(50):
+            mask = gen.draw_masks(batch, random_state=i)[0]
+
+            mask_sum = int(np.sum(mask))
+            mask_sums.append(mask_sum)
+
+            assert np.any(
+                np.isclose(
+                    np.min(np.abs(expected_mask_sums - mask_sum)),
+                    0.0,
+                    rtol=0,
+                    atol=0.01)
+            )
+            assert mask.shape == image.shape[0:2]
+            assert mask.dtype.name == "float32"
+
+        assert len(np.unique(mask_sums)) >= 4
+
+    def test_draw_masks_marks_alpha_is_0(self):
+        image = np.uint8([
+            [255, 0, 0],
+            [0, 255, 0],
+            [0, 0, 255],
+            [255, 255, 0],
+            [255, 0, 255],
+            [0, 255, 255],
+            [255, 128, 128],
+            [128, 255, 128],
+            [128, 128, 255]
+        ]).reshape((1, 9, 3))
+        batch = ia.BatchInAugmentation(images=[image])
+        gen = iaa.SomeColorsMaskGen(alpha=0.0)
+
+        mask = gen.draw_masks(batch)[0]
+
+        assert np.allclose(mask, 0.0)
+
+    def test_draw_masks_alpha_is_1(self):
+        image = np.uint8([
+            [255, 0, 0],
+            [0, 255, 0],
+            [0, 0, 255],
+            [255, 255, 0],
+            [255, 0, 255],
+            [0, 255, 255],
+            [255, 128, 128],
+            [128, 255, 128],
+            [128, 128, 255]
+        ]).reshape((1, 9, 3))
+        batch = ia.BatchInAugmentation(images=[image])
+        gen = iaa.SomeColorsMaskGen(alpha=1.0)
+
+        mask = gen.draw_masks(batch)[0]
+
+        assert np.allclose(mask, 1.0)
+
+    @mock.patch("imgaug.augmenters.color.change_colorspace_")
+    def test_from_colorspace(self, mock_cc):
+        image = np.uint8([
+            [255, 0, 0],
+            [0, 255, 0],
+            [0, 0, 255],
+            [255, 255, 0],
+            [255, 0, 255],
+            [0, 255, 255],
+            [255, 128, 128],
+            [128, 255, 128],
+            [128, 128, 255]
+        ]).reshape((1, 9, 3))
+        batch = ia.BatchInAugmentation(images=[image])
+        mock_cc.return_value = np.copy(image)
+        gen = iaa.SomeColorsMaskGen(alpha=1.0, from_colorspace=iaa.CSPACE_BGR)
+
+        _ = gen.draw_masks(batch)
+
+        assert mock_cc.call_count == 1
+        assert np.array_equal(mock_cc.call_args_list[0][0][0], image)
+        assert (mock_cc.call_args_list[0][1]["to_colorspace"]
+                == iaa.CSPACE_HSV)
+        assert (mock_cc.call_args_list[0][1]["from_colorspace"]
+                == iaa.CSPACE_BGR)
+
+    def test__upscale_to_256_alpha_bins__1_to_256(self):
+        alphas = np.float32([0.5])
+
+        alphas_up = iaa.SomeColorsMaskGen._upscale_to_256_alpha_bins(alphas)
+
+        assert alphas_up.shape == (256,)
+        assert np.allclose(alphas_up, 0.5)
+
+    def test__upscale_to_256_alpha_bins__2_to_256(self):
+        alphas = np.float32([1.0, 0.5])
+
+        alphas_up = iaa.SomeColorsMaskGen._upscale_to_256_alpha_bins(alphas)
+
+        assert alphas_up.shape == (256,)
+        assert np.allclose(alphas_up[0:128], 1.0)
+        assert np.allclose(alphas_up[128:], 0.5)
+
+    def test__upscale_to_256_alpha_bins__255_to_256(self):
+        alphas = np.zeros((255,), dtype=np.float32)
+        alphas[0] = 0.25
+        alphas[1:254] = 0.5
+        alphas[254] = 1.0
+
+        alphas_up = iaa.SomeColorsMaskGen._upscale_to_256_alpha_bins(alphas)
+
+        assert alphas_up.shape == (256,)
+        assert np.allclose(alphas_up[0:2], 0.25)
+        assert np.allclose(alphas_up[2:], 0.5)
+
+    def test__upscale_to_256_alpha_bins__256_to_256(self):
+        alphas = np.full((256,), 0.5, dtype=np.float32)
+
+        alphas_up = iaa.SomeColorsMaskGen._upscale_to_256_alpha_bins(alphas)
+
+        assert alphas_up.shape == (256,)
+        assert np.allclose(alphas, 0.5)
+
+    def test__rotate_alpha_bins__by_0(self):
+        alphas = np.linspace(0.0, 1.0, 256)
+
+        alphas_rot = iaa.SomeColorsMaskGen._rotate_alpha_bins(alphas, 0)
+
+        assert np.allclose(alphas_rot, alphas)
+
+    def test__rotate_alpha_bins__by_1(self):
+        alphas = np.linspace(0.0, 1.0, 256)
+
+        alphas_rot = iaa.SomeColorsMaskGen._rotate_alpha_bins(alphas, 1)
+
+        assert np.allclose(alphas_rot[:-1], alphas[1:])
+        assert np.allclose(alphas_rot[-1:], alphas[:1])
+
+    def test__rotate_alpha_bins__by_255(self):
+        alphas = np.linspace(0.0, 1.0, 256)
+
+        alphas_rot = iaa.SomeColorsMaskGen._rotate_alpha_bins(alphas, 255)
+
+        assert np.allclose(alphas_rot[:-255], alphas[255:])
+        assert np.allclose(alphas_rot[-255:], alphas[:255])
+
+    def test__rotate_alpha_bins__by_256(self):
+        alphas = np.linspace(0.0, 1.0, 256)
+
+        alphas_rot = iaa.SomeColorsMaskGen._rotate_alpha_bins(alphas, 256)
+
+        assert np.allclose(alphas_rot, alphas)
+
+    def test__smoothen_alphas__0(self):
+        alphas = np.zeros((11,), dtype=np.float32)
+        alphas[5-3:5+3+1] = 1.0
+
+        alphas_smooth = iaa.SomeColorsMaskGen._smoothen_alphas(alphas, 0.0)
+
+        assert np.allclose(alphas_smooth, alphas)
+
+    def test__smoothen_alphas__002(self):
+        alphas = np.zeros((11,), dtype=np.float32)
+        alphas[5-3:5+3+1] = 1.0
+
+        alphas_smooth = iaa.SomeColorsMaskGen._smoothen_alphas(alphas, 0.02)
+
+        assert np.allclose(alphas_smooth, alphas, atol=0.02)
+
+    def test__smoothen_alphas__1(self):
+        alphas = np.zeros((11,), dtype=np.float32)
+        alphas[5-3:5+3+1] = 1.0
+
+        alphas_smooth = iaa.SomeColorsMaskGen._smoothen_alphas(alphas, 1.0)
+
+        assert np.isclose(alphas_smooth[0], 0.0, atol=0.01)
+        assert not np.isclose(alphas_smooth[2], 1.0, atol=0.1)
+        assert np.isclose(alphas_smooth[5], 1.0, atol=0.01)
+
+    def test__generate_pixelwise_alpha_map(self):
+        image_hsv = np.uint8([
+            [0, 0, 0],
+            [50, 0, 0],
+            [100, 0, 0],
+            [150, 0, 0],
+            [200, 0, 0],
+            [250, 0, 0],
+            [255, 0, 0]
+        ]).reshape((1, 7, 3))
+        hue_to_alpha = np.zeros((256,), dtype=np.float32)
+        hue_to_alpha[0] = 0.1
+        hue_to_alpha[50] = 0.2
+        hue_to_alpha[100] = 0.3
+        hue_to_alpha[150] = 0.4
+        hue_to_alpha[200] = 0.5
+        hue_to_alpha[250] = 0.6
+        hue_to_alpha[255] = 0.7
+
+        mask = iaa.SomeColorsMaskGen._generate_pixelwise_alpha_mask(
+            image_hsv, hue_to_alpha)
+
+        # a bit of tolerance here due to the mask being converted from
+        # [0, 255] to [0.0, 1.0]
+        assert np.allclose(
+            mask.flatten(),
+            [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7],
+            atol=0.05)
+
+    def test_zero_sized_axes(self):
+        shapes = [
+            (0, 0, 3),
+            (0, 1, 3),
+            (1, 0, 3)
+        ]
+
+        for shape in shapes:
+            with self.subTest(shape=shape):
+                image = np.zeros(shape, dtype=np.uint8)
+                batch = ia.BatchInAugmentation(images=[image])
+                gen = iaa.SomeColorsMaskGen()
+
+                mask = gen.draw_masks(batch)[0]
+
+                assert mask.shape == shape[0:2]
+                assert mask.dtype.name == "float32"
+
+    def test_batch_contains_no_images(self):
+        hms = ia.HeatmapsOnImage(np.zeros((5, 5), dtype=np.float32),
+                                 shape=(10, 10, 3))
+        batch = ia.BatchInAugmentation(heatmaps=[hms])
+        gen = iaa.SomeColorsMaskGen()
+
+        with self.assertRaises(AssertionError):
+            _masks = gen.draw_masks(batch)
+
+
 class TestSimplexNoiseAlpha(unittest.TestCase):
     def test_deprecation_warning(self):
         aug1 = iaa.Sequential([])
