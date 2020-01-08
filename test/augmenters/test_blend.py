@@ -1797,6 +1797,63 @@ class TestBlendAlphaSomeColors(unittest.TestCase):
         runtest_pickleable_uint8_img(aug, iterations=3)
 
 
+class TestBlendAlphaHorizontalLinearGradient(unittest.TestCase):
+    def setUp(self):
+        reseed()
+
+    def test___init__(self):
+        child1 = iaa.Sequential([])
+        child2 = iaa.Sequential([])
+        aug = iaa.BlendAlphaHorizontalLinearGradient(child1, child2)
+        assert aug.foreground is child1
+        assert aug.background is child2
+        assert isinstance(aug.mask_generator,
+                          iaa.HorizontalLinearGradientMaskGen)
+
+    def test_single_image(self):
+        image = np.full((2, 100, 3), 255, dtype=np.uint8)
+        image_drop = iaa.TotalDropout(1.0)(image=image)
+
+        aug = iaa.BlendAlphaHorizontalLinearGradient(iaa.TotalDropout(1.0),
+                                                     min_value=0.0,
+                                                     max_value=1.0,
+                                                     start_at=0.2,
+                                                     end_at=0.8)
+        image_aug = aug(image=image)
+
+        assert np.array_equal(image_aug[0, :, :], image_aug[1, :, :])
+        assert np.array_equal(image_aug[:, :20, :], image[:, :20, :])
+        assert np.array_equal(image_aug[:, 80:, :], image_drop[:, 80:, :])
+        assert not np.array_equal(image_aug[:, 20:80, :], image[:, 20:80, :])
+        assert not np.array_equal(image_aug[:, 20:80, :],
+                                  image_drop[:, 20:80, :])
+
+    def test_zero_sized_axes(self):
+        shapes = [
+            (0, 0, 3),
+            (0, 1, 3),
+            (1, 0, 3)
+        ]
+
+        for shape in shapes:
+            with self.subTest(shape=shape):
+                image = np.full(shape, 0, dtype=np.uint8)
+                aug = iaa.BlendAlphaHorizontalLinearGradient(
+                    iaa.TotalDropout(1.0))
+
+                image_aug = aug(image=image)
+
+                assert image_aug.dtype.name == "uint8"
+                assert image_aug.shape == shape
+
+    def test_pickleable(self):
+        aug = iaa.BlendAlphaHorizontalLinearGradient(
+            iaa.Add((1, 10), random_state=1),
+            iaa.Add((11, 20), random_state=2),
+            random_state=3)
+        runtest_pickleable_uint8_img(aug, iterations=3)
+
+
 class TestStochasticParameterMaskGen(unittest.TestCase):
     def _test_draw_masks_nhwc(self, shape):
         batch = ia.BatchInAugmentation(
