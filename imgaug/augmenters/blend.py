@@ -1848,6 +1848,102 @@ class SomeColorsMaskGen(IBatchwiseMaskGenerator):
         return mask.astype(np.float32) / 255.0
 
 
+class _LinearGradientMaskGen(IBatchwiseMaskGenerator):
+    def __init__(self, axis, min_value=0.0, max_value=1.0,
+                 start_at=0.0, end_at=1.0):
+        self.axis = axis
+        self.min_value = iap.handle_continuous_param(
+            min_value, "min_value", value_range=(0.0, 1.0),
+            tuple_to_uniform=True, list_to_choice=True)
+        self.max_value = iap.handle_continuous_param(
+            max_value, "max_value", value_range=(0.0, 1.0),
+            tuple_to_uniform=True, list_to_choice=True)
+        self.start_at = iap.handle_continuous_param(
+            start_at, "start_at", value_range=(0.0, 1.0),
+            tuple_to_uniform=True, list_to_choice=True)
+        self.end_at = iap.handle_continuous_param(
+            end_at, "end_at", value_range=(0.0, 1.0),
+            tuple_to_uniform=True, list_to_choice=True)
+
+    def draw_masks(self, batch, random_state=None):
+        """
+        See :func:`imgaug.augmenters.blend.IBatchwiseMaskGenerator.draw_masks`.
+
+        """
+        random_state = iarandom.RNG(random_state)
+        shapes = batch.get_rowwise_shapes()
+        samples = self._draw_samples(len(shapes), random_state=random_state)
+
+        return [self._draw_mask(shape, i, samples)
+                for i, shape
+                in enumerate(shapes)]
+
+    def _draw_mask(self, shape, image_idx, samples):
+        return self.generate_mask(
+            shape,
+            samples[0][image_idx],
+            samples[1][image_idx],
+            samples[2][image_idx],
+            samples[3][image_idx])
+
+    def _draw_samples(self, nb_rows, random_state):
+        min_value = self.min_value.draw_samples((nb_rows,),
+                                                random_state=random_state)
+        max_value = self.max_value.draw_samples((nb_rows,),
+                                                random_state=random_state)
+        start_at = self.start_at.draw_samples(
+            (nb_rows,), random_state=random_state)
+        end_at = self.end_at.draw_samples(
+            (nb_rows,), random_state=random_state)
+
+        return min_value, max_value, start_at, end_at
+
+    @classmethod
+    def _generate_mask(cls, shape, axis, min_value, max_value, start_at,
+                       end_at):
+        height, width = shape[0:2]
+
+        axis_size = shape[axis]
+        min_value = min(max(min_value, 0.0), 1.0)
+        max_value = min(max(max_value, 0.0), 1.0)
+
+        start_at_px = int(start_at * axis_size)
+        start_at_px = min(max(int(start_at * axis_size), 0), axis_size)
+        end_at_px = min(max(int(end_at * axis_size), 0), axis_size)
+
+        inverted = False
+        if end_at_px < start_at_px:
+            inverted = True
+            start_at_px, end_at_px = end_at_px, start_at_px
+
+        before_grad = np.full((start_at_px,), min_value,
+                               dtype=np.float32)
+        grad = np.linspace(start=min_value,
+                           stop=max_value,
+                           num=end_at_px - start_at_px,
+                           dtype=np.float32)
+        after_grad = np.full((width - end_at_px,), max_value,
+                             dtype=np.float32)
+
+        mask = np.concatenate((
+            left_of_grad,
+            grad,
+            right_of_grad
+        ), axis=0)
+
+        if inverted:
+            mask = 1.0 - mask
+
+        if axis == 0:
+            mask = mask[:, np.newaxis]
+            mask = np.tile(mask, (height, 1))
+        else:
+            mask = mask[np.newaxis, :]
+            mask = np.tile(mask, (1, width))
+
+        return mask
+
+
 class HorizontalLinearGradientMaskGen(IBatchwiseMaskGenerator):
     """Generator that produces horizontal linear gradient masks.
 
