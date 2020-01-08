@@ -30,5 +30,6 @@
   `BlendAlphaFrequencyNoise`.
 * Added `imgaug.augmenters.blend.BlendAlphaSomeColors`.
 * Added `imgaug.augmenters.blend.BlendAlphaHorizontalLinearGradient`.
+* Added `imgaug.augmenters.blend.BlendAlphaVerticalLinearGradient`.
 * Fixed a wrong error message in
   `imgaug.augmenters.color.change_colorspace_()`.
