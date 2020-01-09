@@ -2652,6 +2652,43 @@ class SegMapClassIdsMaskGen(IBatchwiseMaskGenerator):
         return mask
 
 
+class InvertMaskGen(IBatchwiseMaskGenerator):
+    """Generator that inverts the outputs of other mask generators.
+
+    This class receives batches and calls for each row (i.e. image)
+    a child mask generator to produce a mask. That mask is then inverted
+    for ``p%`` of all rows, i.e. converted to ``1.0 - mask``.
+
+    Parameters
+    ----------
+    p : bool or float or imgaug.parameters.StochasticParameter, optional
+        Probability of inverting each mask produced by the other mask
+        generator.
+
+    other_mask_gen : IBatchwiseMaskGenerator
+        The other mask generator to invert.
+
+    """
+
+    def __init__(self, p, other_mask_gen):
+        self.p = iap.handle_probability_param(p, "p")
+        self.other_mask_gen = other_mask_gen
+
+    def draw_masks(self, batch, random_state=None):
+        """
+        See :func:`imgaug.augmenters.blend.IBatchwiseMaskGenerator.draw_masks`.
+
+        """
+        random_state = iarandom.RNG(random_state)
+        masks = self.other_mask_gen.draw_masks(batch,
+                                               random_state=random_state)
+        p = self.p.draw_samples(len(masks), random_state=random_state)
+        for mask, p_i in zip(masks, p):
+            if p_i >= 0.5:
+                mask[...] = 1.0 - mask
+        return masks
+
+
 @ia.deprecated(alt_func="Alpha",
                comment="Alpha is deprecated. "
                        "Use BlendAlpha instead. "

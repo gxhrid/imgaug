@@ -2721,6 +2721,68 @@ class TestSegMapClassIdsMaskGen(unittest.TestCase):
             mask = gen.draw_masks(batch)[0]
 
 
+class InvertMaskGen(unittest.TestCase):
+    def setUp(self):
+        reseed()
+
+    def test___init__(self):
+        child = iaa.HorizontalLinearGradientMaskGen()
+        gen = iaa.InvertMaskGen(0.5, child)
+        assert np.isclose(gen.p.p.value, 0.5)
+        assert gen.other_mask_gen is child
+
+    def test_draw_masks(self):
+        image = np.zeros((1, 20), dtype=np.uint8)
+        batch = ia.BatchInAugmentation(images=[image] * 200)
+
+        child = iaa.HorizontalLinearGradientMaskGen(min_value=0.0,
+                                                    max_value=1.0,
+                                                    start_at=0.0,
+                                                    end_at=1.0)
+        gen = iaa.InvertMaskGen(0.5, child)
+
+        masks = gen.draw_masks(batch, random_state=1)
+
+        hgrad = iaa.HorizontalLinearGradientMaskGen.generate_mask(
+            (1, 20), min_value=0.0, max_value=1.0, start_at=0.0, end_at=1.0)
+        expected1 = hgrad
+        expected2 = 1.0 - hgrad
+        seen = [0, 0]
+        for mask in masks:
+            if np.allclose(mask, expected1):
+                seen[0] += 1
+            elif np.allclose(mask, expected2):
+                seen[1] += 1
+            else:
+                assert False
+        assert np.allclose(seen, 0.5*200, rtol=0, atol=20)
+
+    def test_zero_sized_axes(self):
+        shapes = [
+            (0, 0),
+            (0, 1),
+            (1, 0),
+            (0, 0, 0),
+            (1, 0, 0),
+            (0, 1, 0),
+            (0, 0, 1),
+            (0, 1, 1),
+            (1, 0, 1)
+        ]
+
+        for shape in shapes:
+            with self.subTest(shape=shape):
+                image = np.zeros(shape, dtype=np.uint8)
+                batch = ia.BatchInAugmentation(images=[image])
+                child = iaa.HorizontalLinearGradientMaskGen()
+                gen = iaa.InvertMaskGen(0.5, child)
+
+                mask = gen.draw_masks(batch)[0]
+
+                assert mask.shape == shape[0:2]
+                assert mask.dtype.name == "float32"
+
+
 class TestSimplexNoiseAlpha(unittest.TestCase):
     def test_deprecation_warning(self):
         aug1 = iaa.Sequential([])
