@@ -2351,6 +2351,150 @@ class VerticalLinearGradientMaskGen(_LinearGradientMaskGen):
             end_at=end_at)
 
 
+class SegMapClassIdsMaskGen(IBatchwiseMaskGenerator):
+    """Generator that produces masks highlighting segmentation map classes.
+
+    This class produces for each segmentation map in a batch a mask in which
+    the locations of a set of provided classes are highlighted (i.e. ``1.0``).
+    The classes may be provided as a fixed list of class ids or a stochastic
+    parameter from which class ids will be sampled.
+
+    The produced masks are initially of the same height and width as the
+    segmentation map arrays and later upscaled to the image height and width.
+
+    .. note::
+
+        Segmentation maps can have multiple channels. If that is the case
+        then for each position ``(x, y)`` it is sufficient that any class id
+        in any channel matches one of the desired class ids.
+
+    .. note::
+
+        This class will produce an ``AssertionError`` if there are no
+        segmentation maps in a batch.
+
+    Parameters
+    ----------
+    class_ids : int or tuple of int or list of int or imgaug.parameters.StochasticParameter
+        Segmentation map classes to mark in the produced mask.
+
+        If `nb_sample_classes` is ``None`` then this is expected to be either
+        a single ``int`` (always mark this one class id) or a ``list`` of
+        ``int`` s (always mark these class ids).
+
+        If `nb_sample_classes` is set, then this parameter will be treated
+        as a stochastic parameter with the following valid types:
+
+            * If ``int``: Exactly that class id will be used for all
+              segmentation maps.
+            * If ``tuple`` ``(a, b)``: ``N`` random values will be uniformly
+              sampled per segmentation map from the discrete interval
+              ``[a..b]`` and used as the class ids.
+            * If ``list``: ``N`` random values will be picked per segmentation
+              map from that list and used as the class ids.
+            * If ``StochasticParameter``: That parameter will be queried once
+              per batch for ``(sum(N),)`` values.
+
+        ``N`` denotes the number of classes to sample per segmentation
+        map (derived from `nb_sample_classes`) and ``sum(N)`` denotes the
+        sum of ``N`` s over all segmentation maps.
+
+    nb_sample_classes : None or tuple of int or list of int or imgaug.parameters.StochasticParameter, optional
+        Number of class ids to sample (with replacement) per segmentation map.
+        As sampling happens with replacement, fewer *unique* class ids may be
+        sampled.
+
+            * If ``None``: `class_ids` is expected to be a fixed value of
+              class ids to be used for all segmentation maps without sampling.
+            * If ``int``: Exactly that many class ids will be sampled for all
+              segmentation maps.
+            * If ``tuple`` ``(a, b)``: A random value will be uniformly
+              sampled per segmentation map from the discrete interval
+              ``[a..b]``.
+            * If ``list``: A random value will be picked per segmentation
+              map from that list.
+            * If ``StochasticParameter``: That parameter will be queried once
+              per batch for ``(B,)`` values, where ``B`` is the number of
+              segmentation maps.
+
+    """
+    def __init__(self, class_ids, nb_sample_classes=None):
+        if nb_sample_classes is None:
+            if ia.is_single_integer(class_ids):
+                class_ids = [class_ids]
+            assert isinstance(class_ids, list), (
+                "Expected `class_ids` to be a single integer or a list of "
+                "integers if `nb_sample_classes` is None. Got type `%s`. "
+                "Set `nb_sample_classes` to e.g. an integer to enable "
+                "stochastic parameters for `class_ids`." % (
+                    type(class_ids).__name__,))
+            self.class_ids = class_ids
+            self.nb_sample_classes = None
+        else:
+            self.class_ids = iap.handle_discrete_param(
+                class_ids, "class_ids", value_range=(0, None),
+                tuple_to_uniform=True, list_to_choice=True,
+                allow_floats=False)
+            self.nb_sample_classes = iap.handle_discrete_param(
+                nb_sample_classes, "nb_sample_classes", value_range=(0, None),
+                tuple_to_uniform=True, list_to_choice=True,
+                allow_floats=False)
+
+    def draw_masks(self, batch, random_state=None):
+        """
+        See :func:`imgaug.augmenters.blend.IBatchwiseMaskGenerator.draw_masks`.
+
+        """
+        assert batch.segmentation_maps is not None, (
+            "Can only generate masks for batches that contain segmentation "
+            "maps, but got a batch without them.")
+        random_state = iarandom.RNG(random_state)
+        class_ids = self._draw_samples(batch.nb_rows,
+                                       random_state=random_state)
+
+        return [self.generate_mask(segmap.arr, class_ids, segmap.shape)
+                for segmap, class_ids_i
+                in zip(batch.segmentation_maps, class_ids)]
+
+    def _draw_samples(self, nb_rows, random_state):
+        nb_sample_classes = self.nb_sample_classes
+        if nb_sample_classes is None:
+            assert isinstance(self.class_ids, list), (
+                "Expected list got %s." % (type(self.class_ids).__name__,))
+            return [self.class_ids] * nb_rows
+
+        nb_sample_classes = nb_sample_classes.draw_samples(
+            (nb_rows,), random_state=random_state)
+        nb_sample_classes = np.clip(nb_sample_classes, 0, None)
+        class_ids_raw = self.class_ids.draw_samples(
+            (np.sum(nb_sample_classes),),
+            random_state=random_state)
+
+        class_ids = []
+        ith_class_id = 0
+        for nb_sample_classes_i in nb_sample_classes:
+            start = ith_class_id
+            end = start + nb_sample_classes_i
+            class_ids.append(class_ids_raw[start:end])
+            ith_class_id += nb_sample_classes_i
+
+        return class_ids
+
+    @classmethod
+    def generate_mask(cls, segmap_arr, class_ids, output_shape):
+        mask = np.zeros(segmap_arr.shape[0:2], dtype=bool)
+
+        for class_id in class_ids:
+            # note that segmap has shape (H,W,C), so we max() along C
+            mask_i = np.any(segmap_arr == class_id, axis=2)
+            mask = np.logical_or(mask, mask_i)
+
+        mask = mask.astype(np.float32)
+        mask = ia.imresize_single_image(mask, output_shape[0:2])
+
+        return mask
+
+
 @ia.deprecated(alt_func="Alpha",
                comment="Alpha is deprecated. "
                        "Use BlendAlpha instead. "

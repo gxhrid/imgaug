@@ -10,9 +10,11 @@
 * Added `imgaug.augmenters.blend.SomeColorsMaskGen`, a colorwise
   mask generator for `BlendAlphaMask`.
 * Added `imgaug.augmenters.blend.HorizontalLinearGradientMaskGen`, a linear
-  gradient genrator for `BlendAlphaMask`.
+  gradient mask generator for `BlendAlphaMask`.
 * Added `imgaug.augmenters.blend.VerticalLinearGradientMaskGen`, a linear
-  gradient genrator for `BlendAlphaMask`.
+  gradient mask generator for `BlendAlphaMask`.
+* Added `imgaug.augmenters.blend.SegMapClassIdsMaskGen`, a segmentation
+  map-based mask generator for `BlendAlphaMask`.
 * Changed `imgaug.parameters.SimplexNoise` and
   `imgaug.parameters.FrequencyNoise` to also accept `(H, W, C)` sampling
   shapes, instead of only `(H, W)`.

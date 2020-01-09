@@ -2466,6 +2466,163 @@ class TestHorizontalLinearGradientMaskGen(unittest.TestCase):
                            rtol=0, atol=0.025)
 
 
+class TestSegMapClassIdsMaskGen(unittest.TestCase):
+    def setUp(self):
+        reseed()
+
+    def test___init___fixed_class_ids_int(self):
+        gen = iaa.SegMapClassIdsMaskGen(0)
+        assert gen.class_ids == [0]
+        assert gen.nb_sample_classes is None
+
+    def test___init___fixed_class_ids_list(self):
+        gen = iaa.SegMapClassIdsMaskGen([0, 1, 3])
+        assert gen.class_ids == [0, 1, 3]
+        assert gen.nb_sample_classes is None
+
+    def test___init___class_ids_stochastic(self):
+        gen = iaa.SegMapClassIdsMaskGen([0, 1, 3], nb_sample_classes=2)
+        assert isinstance(gen.class_ids, iap.Choice)
+        assert isinstance(gen.nb_sample_classes, iap.Deterministic)
+
+    def test_draw_masks__fixed_class_ids(self):
+        segmap_arr = np.zeros((3, 2, 2), dtype=np.int32)
+        segmap_arr[0, 0, 0] = 1
+        segmap_arr[0, 1, 0] = 2
+        segmap_arr[1, 0, 0] = 1
+        segmap_arr[0, 0, 1] = 3
+        segmap_arr[1, 1, 1] = 3
+        segmap = ia.SegmentationMapsOnImage(segmap_arr, shape=(3, 2, 3))
+        batch = ia.BatchInAugmentation(segmentation_maps=[segmap])
+        gen = iaa.SegMapClassIdsMaskGen([2, 3])
+
+        mask = gen.draw_masks(batch, random_state=1)[0]
+
+        assert mask.shape == segmap_arr.shape[0:2]
+        assert mask.dtype.name == "float32"
+        assert np.isclose(mask[0, 0], 1.0)  # class id 1 and 3
+        assert np.isclose(mask[0, 1], 1.0)  # class id 2 and 0
+        assert np.isclose(mask[1, 1], 1.0)  # class id 0 and 3
+        assert np.isclose(mask[1, 0], 0.0)  # class id 1 and 0
+        assert np.allclose(mask[2, :], 0.0)  # class id 0 in whole row
+
+    def test_draw_masks__stochastic_class_ids(self):
+        segmap_arr = np.zeros((3, 2, 2), dtype=np.int32)
+        segmap_arr[0, 0, 0] = 1
+        segmap_arr[0, 1, 0] = 2
+        segmap_arr[1, 0, 0] = 1
+        segmap_arr[0, 0, 1] = 3
+        segmap_arr[1, 1, 1] = 3
+        segmap = ia.SegmentationMapsOnImage(segmap_arr, shape=(3, 2, 3))
+        batch = ia.BatchInAugmentation(segmentation_maps=[segmap])
+        gen = iaa.SegMapClassIdsMaskGen([2, 3], nb_sample_classes=1)
+
+        expected_class_2 = np.float32([
+            [0, 1],
+            [0, 0],
+            [0, 0]
+        ])
+        expected_class_3 = np.float32([
+            [1, 0],
+            [0, 1],
+            [0, 0]
+        ])
+        seen = [False, False]
+        for i in np.arange(50):
+            mask = gen.draw_masks(batch, random_state=i)[0]
+
+            if np.allclose(mask, expected_class_2):
+                seen[0] = True
+            elif np.allclose(mask, expected_class_3):
+                seen[1] = True
+            else:
+                assert False
+
+            if np.all(seen):
+                break
+        assert np.all(seen)
+
+    def test_generate_mask(self):
+        segmap_arr = np.zeros((3, 2, 2), dtype=np.int32)
+        segmap_arr[0, 0, 0] = 1
+        segmap_arr[0, 1, 0] = 2
+        segmap_arr[1, 0, 0] = 1
+        segmap_arr[0, 0, 1] = 3
+        segmap_arr[1, 1, 1] = 3
+
+        mask = iaa.SegMapClassIdsMaskGen.generate_mask(segmap_arr,
+                                                       [1, 2],
+                                                       (3, 2))
+
+        expected = np.float32([
+            [1.0, 1.0],
+            [1.0, 0.0],
+            [0.0, 0.0]
+        ])
+        assert np.allclose(mask, expected)
+
+    def test_generate_mask__smaller_than_image(self):
+        segmap_arr = np.zeros((3, 2, 2), dtype=np.int32)
+        segmap_arr[0, 0, 0] = 1
+        segmap_arr[0, 1, 0] = 2
+        segmap_arr[1, 0, 0] = 1
+        segmap_arr[0, 0, 1] = 3
+        segmap_arr[1, 1, 1] = 3
+
+        mask = iaa.SegMapClassIdsMaskGen.generate_mask(segmap_arr,
+                                                       [1, 2],
+                                                       (3, 4))
+
+        expected = np.float32([
+            [1.0, 1.0, 1.0, 1.0],
+            [1.0, 1.0, 0.0, 0.0],
+            [0.0, 0.0, 0.0, 0.0]
+        ])
+        assert np.allclose(mask, expected, rtol=0.0, atol=0.1)
+
+    def test_zero_sized_axes(self):
+        # zero-sized segmap arrays currently crash when creating
+        # SegmentationMapsOnImage and that's probably better that way
+        segmap_shapes = [
+            (2, 2, 1)
+        ]
+
+        image_shapes = [
+            (2, 3, 3),
+            (0, 0),
+            (0, 1),
+            (1, 0),
+            (0, 1, 0),
+            (1, 0, 0),
+            (0, 1, 1),
+            (1, 0, 1)
+        ]
+
+        for segmap_shape in segmap_shapes:
+            for image_shape in image_shapes:
+                with self.subTest(segmap_shape=segmap_shape,
+                                  image_shape=image_shape):
+                    segmap_arr = np.zeros(segmap_shape, dtype=np.int32)
+                    segmap = ia.SegmentationMapsOnImage(segmap_arr,
+                                                        shape=image_shape)
+                    batch = ia.BatchInAugmentation(segmentation_maps=[segmap])
+
+                    gen = iaa.SegMapClassIdsMaskGen(1)
+                    mask = gen.draw_masks(batch)[0]
+                    assert mask.shape == image_shape[0:2]
+                    assert mask.dtype.name == "float32"
+                    assert np.allclose(mask, 0.0)
+
+    def test_batch_contains_no_segmaps(self):
+        hms = ia.HeatmapsOnImage(np.zeros((5, 5), dtype=np.float32),
+                                 shape=(10, 10, 3))
+        batch = ia.BatchInAugmentation(heatmaps=[hms])
+        gen = iaa.SegMapClassIdsMaskGen(class_ids=[1])
+
+        with self.assertRaises(AssertionError):
+            mask = gen.draw_masks(batch)[0]
+
+
 class TestSimplexNoiseAlpha(unittest.TestCase):
     def test_deprecation_warning(self):
         aug1 = iaa.Sequential([])
