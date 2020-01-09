@@ -1405,6 +1405,15 @@ class BlendAlphaSomeColors(BlendAlphaMask):
     from_colorspace : str, optional
         See :class:`imgaug.augmenters.blend.SomeColorsMaskGen`.
 
+    name : None or str, optional
+        See :func:`imgaug.augmenters.meta.Augmenter.__init__`.
+
+    deterministic : bool, optional
+        See :func:`imgaug.augmenters.meta.Augmenter.__init__`.
+
+    random_state : None or int or imgaug.random.RNG or numpy.random.Generator or numpy.random.BitGenerator or numpy.random.SeedSequence or numpy.random.RandomState, optional
+        See :func:`imgaug.augmenters.meta.Augmenter.__init__`.
+
     Examples
     --------
     >>> import imgaug.augmenters as iaa
@@ -1522,6 +1531,15 @@ class BlendAlphaHorizontalLinearGradient(BlendAlphaMask):
     end_at : number or tuple of number or list of number or imgaug.parameters.StochasticParameter, optional
         See :class:`imgaug.augmenters.blend.HorizontalLinearGradientMaskGen`.
 
+    name : None or str, optional
+        See :func:`imgaug.augmenters.meta.Augmenter.__init__`.
+
+    deterministic : bool, optional
+        See :func:`imgaug.augmenters.meta.Augmenter.__init__`.
+
+    random_state : None or int or imgaug.random.RNG or numpy.random.Generator or numpy.random.BitGenerator or numpy.random.SeedSequence or numpy.random.RandomState, optional
+        See :func:`imgaug.augmenters.meta.Augmenter.__init__`.
+
     Examples
     --------
     >>> import imgaug.augmenters as iaa
@@ -1624,6 +1642,15 @@ class BlendAlphaVerticalLinearGradient(BlendAlphaMask):
 
     end_at : number or tuple of number or list of number or imgaug.parameters.StochasticParameter, optional
         See :class:`imgaug.augmenters.blend.VerticalLinearGradientMaskGen`.
+
+    name : None or str, optional
+        See :func:`imgaug.augmenters.meta.Augmenter.__init__`.
+
+    deterministic : bool, optional
+        See :func:`imgaug.augmenters.meta.Augmenter.__init__`.
+
+    random_state : None or int or imgaug.random.RNG or numpy.random.Generator or numpy.random.BitGenerator or numpy.random.SeedSequence or numpy.random.RandomState, optional
+        See :func:`imgaug.augmenters.meta.Augmenter.__init__`.
 
     Examples
     --------
@@ -1737,6 +1764,15 @@ class BlendAlphaSegMapClassIds(BlendAlphaMask):
 
     nb_sample_classes : None or tuple of int or list of int or imgaug.parameters.StochasticParameter, optional
         See :class:`imgaug.augmenters.blend.SegMapClassIdsMaskGen`.
+
+    name : None or str, optional
+        See :func:`imgaug.augmenters.meta.Augmenter.__init__`.
+
+    deterministic : bool, optional
+        See :func:`imgaug.augmenters.meta.Augmenter.__init__`.
+
+    random_state : None or int or imgaug.random.RNG or numpy.random.Generator or numpy.random.BitGenerator or numpy.random.SeedSequence or numpy.random.RandomState, optional
+        See :func:`imgaug.augmenters.meta.Augmenter.__init__`.
 
     Examples
     --------
