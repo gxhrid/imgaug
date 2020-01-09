@@ -11,6 +11,7 @@ List of augmenters:
     * BlendAlphaSomeColors
     * BlendAlphaHorizontalLinearGradient
     * BlendAlphaVerticalLinearGradient
+    * BlendAlphaSegMapClassIds
 
 """
 from __future__ import print_function, division, absolute_import
@@ -1669,6 +1670,118 @@ class BlendAlphaVerticalLinearGradient(BlendAlphaMask):
                 max_value=max_value,
                 start_at=start_at,
                 end_at=end_at
+            ),
+            foreground=foreground,
+            background=background,
+            name=name,
+            deterministic=deterministic,
+            random_state=random_state
+        )
+
+
+class BlendAlphaSegMapClassIds(BlendAlphaMask):
+    """Blend images from two branches based on segmentation map ids.
+
+    This class generates masks that are ``1.0`` at pixel locations covered
+    by specific classes in segmentation maps.
+
+    This class is a thin wrapper around
+    :class:`imgaug.augmenters.blend.BlendAlphaMask` together with
+    :class:`imgaug.augmenters.blend.SegMapClassIdsMaskGen`.
+
+    .. note::
+
+        Avoid using augmenters as children that affect pixel locations (e.g.
+        horizontal flips). See
+        :class:`imgaug.augmenters.blend.BlendAlphaMask` for details.
+
+    .. note::
+
+        Segmentation maps can have multiple channels. If that is the case
+        then for each position ``(x, y)`` it is sufficient that any class id
+        in any channel matches one of the desired class ids.
+
+    .. note::
+
+        This class will produce an ``AssertionError`` if there are no
+        segmentation maps in a batch.
+
+    dtype support::
+
+        See :class:`imgaug.augmenters.blend.BlendAlphaMask`.
+
+    Parameters
+    ----------
+    class_ids : int or tuple of int or list of int or imgaug.parameters.StochasticParameter
+        See :class:`imgaug.augmenters.blend.SegMapClassIdsMaskGen`.
+
+    foreground : None or imgaug.augmenters.meta.Augmenter or iterable of imgaug.augmenters.meta.Augmenter, optional
+        Augmenter(s) that make up the foreground branch.
+        High alpha values will show this branch's results.
+
+            * If ``None``, then the input images will be reused as the output
+              of the foreground branch.
+            * If ``Augmenter``, then that augmenter will be used as the branch.
+            * If iterable of ``Augmenter``, then that iterable will be
+              converted into a ``Sequential`` and used as the augmenter.
+
+    background : None or imgaug.augmenters.meta.Augmenter or iterable of imgaug.augmenters.meta.Augmenter, optional
+        Augmenter(s) that make up the background branch.
+        Low alpha values will show this branch's results.
+
+            * If ``None``, then the input images will be reused as the output
+              of the background branch.
+            * If ``Augmenter``, then that augmenter will be used as the branch.
+            * If iterable of ``Augmenter``, then that iterable will be
+              converted into a ``Sequential`` and used as the augmenter.
+
+    nb_sample_classes : None or tuple of int or list of int or imgaug.parameters.StochasticParameter, optional
+        See :class:`imgaug.augmenters.blend.SegMapClassIdsMaskGen`.
+
+    Examples
+    --------
+    >>> import imgaug.augmenters as iaa
+    >>> aug = iaa.BlendAlphaSegMapClassIds(
+    >>>     [1, 3], foreground=iaa.Grayscale(1.0))
+
+    Create an augmenter that removes color wherever the segmentation maps
+    contain the classes ``1`` or ``3``.
+
+    >>> aug = iaa.BlendAlphaSegMapClassIds(
+    >>>     [1, 2, 3, 4],
+    >>>     nb_sample_classes=2,
+    >>>     foreground=iaa.GaussianBlur(3.0))
+
+    Create an augmenter that randomly picks ``2`` classes from the
+    list ``[1, 2, 3, 4]`` and blurs the image content wherever these classes
+    appear in the segmentation map. Note that as the sampling of class ids
+    happens *with replacement*, it is not guaranteed to sample two *unique*
+    class ids.
+
+    >>> aug = iaa.Sometimes(0.2,
+    >>>     iaa.BlendAlphaSegMapClassIds(
+    >>>         2,
+    >>>         background=iaa.TotalDropout(1.0)))
+
+    Create an augmenter that zeros for roughly every fifth image all
+    image pixels that do *not* belong to class id ``2`` (note that the
+    `background` branch was used, not the `foreground` branch).
+    Example use case: Human body landmark detection where both the
+    landmarks/keypoints and the body segmentation map are known. Train the
+    model to detect landmarks and sometimes remove all non-body information
+    to force the model to become more independent of the background.
+
+    """
+
+    def __init__(self,
+                 class_ids,
+                 foreground=None, background=None,
+                 nb_sample_classes=None,
+                 name=None, deterministic=False, random_state=None):
+        super(BlendAlphaSegMapClassIds, self).__init__(
+            SegMapClassIdsMaskGen(
+                class_ids=class_ids,
+                nb_sample_classes=nb_sample_classes
             ),
             foreground=foreground,
             background=background,

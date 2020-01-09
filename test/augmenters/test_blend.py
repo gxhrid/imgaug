@@ -12,6 +12,10 @@ try:
     import unittest.mock as mock
 except ImportError:
     import mock
+try:
+    import cPickle as pickle
+except ImportError:
+    import pickle
 
 import matplotlib
 matplotlib.use('Agg')  # fix execution of tests involving matplotlib on travis
@@ -1909,6 +1913,94 @@ class TestBlendAlphaVerticalLinearGradient(unittest.TestCase):
             iaa.Add((11, 20), random_state=2),
             random_state=3)
         runtest_pickleable_uint8_img(aug, iterations=3)
+
+
+class TestBlendAlphaSegMapClassIds(unittest.TestCase):
+    def setUp(self):
+        reseed()
+
+    def test___init__(self):
+        child1 = iaa.Sequential([])
+        child2 = iaa.Sequential([])
+        aug = iaa.BlendAlphaSegMapClassIds(
+            2,
+            nb_sample_classes=1,
+            foreground=child1,
+            background=child2
+        )
+        assert aug.foreground is child1
+        assert aug.background is child2
+        assert isinstance(aug.mask_generator,
+                          iaa.SegMapClassIdsMaskGen)
+        assert aug.mask_generator.class_ids.value == 2
+        assert aug.mask_generator.nb_sample_classes.value == 1
+
+    def test_single_image(self):
+        image = np.full((10, 10, 3), 255, dtype=np.uint8)
+        segmap_arr = np.zeros((5, 10, 1), dtype=np.int32)
+        segmap_arr[0:2, :] = 1
+        aug = iaa.BlendAlphaSegMapClassIds(
+            1,
+            nb_sample_classes=1,
+            foreground=iaa.TotalDropout(1.0)
+        )
+
+        image_aug, segmap_aug = aug(image=image,
+                                    segmentation_maps=[segmap_arr])
+
+        assert np.allclose(image_aug[0:4, :, :], 0, rtol=0, atol=1.01)
+        assert np.allclose(image_aug[4:, :, :], 255, rtol=0, atol=1.01)
+
+    def test_zero_sized_axes(self):
+        shapes = [
+            (0, 0),
+            (0, 1),
+            (1, 0),
+            (0, 1, 0),
+            (1, 0, 0),
+            (0, 1, 1),
+            (1, 0, 1)
+        ]
+
+        for shape in shapes:
+            with self.subTest(shape=shape):
+                image = np.full(shape, 0, dtype=np.uint8)
+                segmap_arr = np.zeros((2, 2, 1), dtype=np.int32)
+                segmap_arr[0, 0] = 2
+                aug = iaa.BlendAlphaSegMapClassIds(
+                    2,
+                    foreground=iaa.TotalDropout(1.0))
+
+                image_aug, segmap_aug = aug(
+                    image=image, segmentation_maps=[segmap_arr])
+
+                assert image_aug.dtype.name == "uint8"
+                assert image_aug.shape == shape
+
+    def test_pickleable(self):
+        shape=(15, 15, 3)
+        iterations=3
+        augmenter = iaa.BlendAlphaSegMapClassIds(
+            [1, 2],
+            foreground=iaa.Add((1, 10), random_state=1),
+            background=iaa.Add((11, 20), random_state=2),
+            nb_sample_classes=1,
+            random_state=3)
+        image = np.mod(np.arange(int(np.prod(shape))), 256).astype(np.uint8)
+        image = image.reshape(shape)
+        segmap_arr = np.zeros((15, 15, 1), dtype=np.int32)
+        segmap_arr[0:2, 0:2] = 1
+        segmap_arr[4:6, 5:8] = 2
+
+        augmenter_pkl = pickle.loads(pickle.dumps(augmenter, protocol=-1))
+
+        for _ in np.arange(iterations):
+            image_aug, sm_aug = augmenter(
+                image=image, segmentation_maps=[segmap_arr])
+            image_aug_pkl, sm_aug_pkl = augmenter_pkl(
+                image=image, segmentation_maps=[segmap_arr])
+            assert np.array_equal(image_aug, image_aug_pkl)
+            assert np.array_equal(sm_aug, sm_aug_pkl)
 
 
 class TestStochasticParameterMaskGen(unittest.TestCase):
