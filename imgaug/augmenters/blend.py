@@ -645,9 +645,17 @@ class BlendAlphaMask(meta.Augmenter):
         # for segmaps here as this is just the mask and not the segmap
         # array.
         mask_3d = np.atleast_3d(mask)
-        mask_avg = (
-            np.average(mask_3d, axis=2) if mask_3d.shape[2] > 0 else 1.0)
-        mask_rs = ia.imresize_single_image(mask_avg, (arr_height, arr_width))
+
+        # masks with zero-sized axes crash in np.average() and cannot be
+        # upscaled in imresize_single_image()
+        if mask.size == 0:
+            mask_rs = np.zeros((arr_height, arr_width),
+                               dtype=np.float32)
+        else:
+            mask_avg = (
+                np.average(mask_3d, axis=2) if mask_3d.shape[2] > 0 else 1.0)
+            mask_rs = ia.imresize_single_image(mask_avg,
+                                               (arr_height, arr_width))
         mask_arr = iadt.clip_(mask_rs, 0, 1.0)
         mask_arr_binarized = (mask_arr >= 0.5)
         return mask_arr_binarized
