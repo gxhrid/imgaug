@@ -2515,7 +2515,7 @@ class TestHorizontalLinearGradientMaskGen(unittest.TestCase):
         assert np.allclose(mask[:, 5:], 0.75)
 
 
-class TestHorizontalLinearGradientMaskGen(unittest.TestCase):
+class TestVerticalLinearGradientMaskGen(unittest.TestCase):
     def setUp(self):
         reseed()
 
