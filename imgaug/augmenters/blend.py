@@ -472,7 +472,7 @@ class BlendAlpha(meta.Augmenter):
 # tested indirectly via BlendAlphaElementwise for historic reasons
 class BlendAlphaMask(meta.Augmenter):
     """
-    Alpha-blend two image sources using masks generated per image.
+    Alpha-blend two image sources using non-binary masks generated per image.
 
     This augmenter queries for each image a mask generator to generate
     a ``(H,W)`` or ``(H,W,C)`` channelwise mask ``[0.0, 1.0]``, where
