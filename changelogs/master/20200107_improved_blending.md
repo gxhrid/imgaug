@@ -41,6 +41,7 @@
 * Added `imgaug.augmenters.blend.BlendAlphaSomeColors`.
 * Added `imgaug.augmenters.blend.BlendAlphaHorizontalLinearGradient`.
 * Added `imgaug.augmenters.blend.BlendAlphaVerticalLinearGradient`.
+* Added `imgaug.augmenters.blend.BlendAlphaRegularGrid`.
 * Added `imgaug.augmenters.blend.BlendAlphaCheckerboard`.
 * Added `imgaug.augmenters.blend.BlendAlphaSegMapClassIds`.
 * Added `imgaug.augmenters.blend.BlendAlphaBoundingBoxes`.

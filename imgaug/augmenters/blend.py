@@ -1965,6 +1965,124 @@ class BlendAlphaBoundingBoxes(BlendAlphaMask):
         )
 
 
+class BlendAlphaRegularGrid(BlendAlphaMask):
+    """Blend images from two branches according to a regular grid.
+
+    This class generates for each image a mask that splits the image into a
+    grid-like pattern of ``H`` rows and ``W`` columns. Each cell is then
+    filled with an alpha value, sampled randomly per cell.
+
+    The difference to :class:`AlphaBlendCheckerboard` is that this class
+    samples random alpha values per grid cell, while in the checkerboard the
+    alpha values follow a fixed pattern.
+
+    This class is a thin wrapper around
+    :class:`imgaug.augmenters.blend.BlendAlphaMask` together with
+    :class:`imgaug.augmenters.blend.RegularGridMaskGen`.
+
+    .. note::
+
+        Avoid using augmenters as children that affect pixel locations (e.g.
+        horizontal flips). See
+        :class:`imgaug.augmenters.blend.BlendAlphaMask` for details.
+
+    dtype support::
+
+        See :class:`imgaug.augmenters.blend.BlendAlphaMask`.
+
+    Parameters
+    ----------
+    nb_rows : int or tuple of int or list of int or imgaug.parameters.StochasticParameter
+        Number of rows of the checkerboard.
+        See :class:`imgaug.augmenters.blend.CheckerboardMaskGen` for details.
+
+    nb_cols : int or tuple of int or list of int or imgaug.parameters.StochasticParameter
+        Number of columns of the checkerboard. Analogous to `nb_rows`.
+        See :class:`imgaug.augmenters.blend.CheckerboardMaskGen` for details.
+
+    foreground : None or imgaug.augmenters.meta.Augmenter or iterable of imgaug.augmenters.meta.Augmenter, optional
+        Augmenter(s) that make up the foreground branch.
+        High alpha values will show this branch's results.
+
+            * If ``None``, then the input images will be reused as the output
+              of the foreground branch.
+            * If ``Augmenter``, then that augmenter will be used as the branch.
+            * If iterable of ``Augmenter``, then that iterable will be
+              converted into a ``Sequential`` and used as the augmenter.
+
+    background : None or imgaug.augmenters.meta.Augmenter or iterable of imgaug.augmenters.meta.Augmenter, optional
+        Augmenter(s) that make up the background branch.
+        Low alpha values will show this branch's results.
+
+            * If ``None``, then the input images will be reused as the output
+              of the background branch.
+            * If ``Augmenter``, then that augmenter will be used as the branch.
+            * If iterable of ``Augmenter``, then that iterable will be
+              converted into a ``Sequential`` and used as the augmenter.
+
+    alpha : number or tuple of number or list of number or imgaug.parameters.StochasticParameter, optional
+        Alpha value of each cell.
+
+        * If ``number``: Exactly that value will be used for all images.
+        * If ``tuple`` ``(a, b)``: A random value will be uniformly sampled
+          per image from the interval ``[a, b]``.
+        * If ``list``: A random value will be picked per image from that list.
+        * If ``StochasticParameter``: That parameter will be queried once
+          per batch for ``(N,)`` values -- one per image.
+
+    name : None or str, optional
+        See :func:`imgaug.augmenters.meta.Augmenter.__init__`.
+
+    deterministic : bool, optional
+        See :func:`imgaug.augmenters.meta.Augmenter.__init__`.
+
+    random_state : None or int or imgaug.random.RNG or numpy.random.Generator or numpy.random.BitGenerator or numpy.random.SeedSequence or numpy.random.RandomState, optional
+        See :func:`imgaug.augmenters.meta.Augmenter.__init__`.
+
+    Examples
+    --------
+    >>> import imgaug.augmenters as iaa
+    >>> aug = iaa.BlendAlphaRegularGrid(nb_rows=(4, 6), nb_cols=(1, 4),
+    >>>                                 foreground=iaa.Multiply(0.0))
+
+    Create an augmenter that places a ``HxW`` grid on each image, where
+    ``H`` (rows) is randomly and uniformly sampled from the interval ``[4, 6]``
+    and ``W`` is analogously sampled from the interval ``[1, 4]``. Roughly
+    half of the cells in the grid are filled with ``0.0``, the remaining ones
+    are unaltered. Which cells exactly are "dropped" is randomly decided
+    per image. The resulting effect is similar to
+    :class:`imgaug.augmenters.arithmetic.CoarseDropout`.
+
+    >>> import imgaug.augmenters as iaa
+    >>> aug = iaa.BlendAlphaRegularGrid(nb_rows=2, nb_cols=2,
+    >>>                                 foreground=iaa.Multiply(0.0),
+    >>>                                 background=iaa.AveragePooling(8),
+    >>>                                 alpha=[0.0, 0.0, 1.0])
+
+    Create an augmenter that always placed ``2x2`` cells on each image
+    and sets about ``1/3`` of them to zero (foreground branch) and
+    the remaining ``2/3`` to a pixelated version (background branch).
+
+    """
+
+    def __init__(self, nb_rows, nb_cols,
+                 foreground=None, background=None,
+                 alpha=[0.0, 1.0],
+                 name=None, deterministic=False, random_state=None):
+        super(BlendAlphaRegularGrid, self).__init__(
+            RegularGridMaskGen(
+                nb_rows=nb_rows,
+                nb_cols=nb_cols,
+                alpha=alpha
+            ),
+            foreground=foreground,
+            background=background,
+            name=name,
+            deterministic=deterministic,
+            random_state=random_state
+        )
+
+
 class BlendAlphaCheckerboard(BlendAlphaMask):
     """Blend images from two branches according to a checkerboard pattern.
 
@@ -2737,7 +2855,7 @@ class VerticalLinearGradientMaskGen(_LinearGradientMaskGen):
 class RegularGridMaskGen(IBatchwiseMaskGenerator):
     """Generate masks following a regular grid pattern.
 
-    This mask generator splits each image into a checkerboard pattern of
+    This mask generator splits each image into a grid-like pattern of
     ``H`` rows and ``W`` columns. Each cell is then filled with an alpha
     value, sampled randomly per cell.
 
