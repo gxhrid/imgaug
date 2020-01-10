@@ -2794,11 +2794,13 @@ class CheckerboardMaskGen(IBatchwiseMaskGenerator):
         Parameters
         ----------
         shape : tuple of int
-
+            Height and width of the output mask.
 
         nb_rows : int
+            Number of rows of the checkerboard pattern.
 
         nb_cols : int
+            Number of columns of the checkerboard pattern.
 
         Returns
         -------
