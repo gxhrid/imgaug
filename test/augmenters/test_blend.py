@@ -3435,7 +3435,7 @@ class InvertMaskGen(unittest.TestCase):
         child = iaa.HorizontalLinearGradientMaskGen()
         gen = iaa.InvertMaskGen(0.5, child)
         assert np.isclose(gen.p.p.value, 0.5)
-        assert gen.other_mask_gen is child
+        assert gen.child is child
 
     def test_draw_masks(self):
         image = np.zeros((1, 20), dtype=np.uint8)

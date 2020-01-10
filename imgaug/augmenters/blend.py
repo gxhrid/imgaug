@@ -3425,14 +3425,14 @@ class InvertMaskGen(IBatchwiseMaskGenerator):
         Probability of inverting each mask produced by the other mask
         generator.
 
-    other_mask_gen : IBatchwiseMaskGenerator
+    child : IBatchwiseMaskGenerator
         The other mask generator to invert.
 
     """
 
-    def __init__(self, p, other_mask_gen):
+    def __init__(self, p, child):
         self.p = iap.handle_probability_param(p, "p")
-        self.other_mask_gen = other_mask_gen
+        self.child = child
 
     def draw_masks(self, batch, random_state=None):
         """
@@ -3440,8 +3440,7 @@ class InvertMaskGen(IBatchwiseMaskGenerator):
 
         """
         random_state = iarandom.RNG(random_state)
-        masks = self.other_mask_gen.draw_masks(batch,
-                                               random_state=random_state)
+        masks = self.child.draw_masks(batch, random_state=random_state)
         p = self.p.draw_samples(len(masks), random_state=random_state)
         for mask, p_i in zip(masks, p):
             if p_i >= 0.5:
