@@ -2277,7 +2277,6 @@ class _LinearGradientMaskGen(IBatchwiseMaskGenerator):
         min_value = min(max(min_value, 0.0), 1.0)
         max_value = min(max(max_value, 0.0), 1.0)
 
-        start_at_px = int(start_at * axis_size)
         start_at_px = min(max(int(start_at * axis_size), 0), axis_size)
         end_at_px = min(max(int(end_at * axis_size), 0), axis_size)
 
