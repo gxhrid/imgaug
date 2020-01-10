@@ -2636,6 +2636,8 @@ class SegMapClassIdsMaskGen(IBatchwiseMaskGenerator):
 
         return class_ids
 
+    # TODO this could be simplified to something like:
+    #      segmap.keep_only_classes(class_ids).draw_mask()
     @classmethod
     def generate_mask(cls, segmap, class_ids):
         mask = np.zeros(segmap.arr.shape[0:2], dtype=bool)
