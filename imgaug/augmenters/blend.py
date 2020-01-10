@@ -2608,7 +2608,7 @@ class SegMapClassIdsMaskGen(IBatchwiseMaskGenerator):
         class_ids = self._draw_samples(batch.nb_rows,
                                        random_state=random_state)
 
-        return [self.generate_mask(segmap.arr, class_ids, segmap.shape)
+        return [self.generate_mask(segmap.arr, class_ids_i, segmap.shape)
                 for segmap, class_ids_i
                 in zip(batch.segmentation_maps, class_ids)]
 
