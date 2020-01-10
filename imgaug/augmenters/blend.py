@@ -2417,7 +2417,7 @@ class _LinearGradientMaskGen(IBatchwiseMaskGenerator):
             start_at_px, end_at_px = end_at_px, start_at_px
 
         before_grad = np.full((start_at_px,), min_value,
-                               dtype=np.float32)
+                              dtype=np.float32)
         grad = np.linspace(start=min_value,
                            stop=max_value,
                            num=end_at_px - start_at_px,
