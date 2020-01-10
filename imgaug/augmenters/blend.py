@@ -2673,6 +2673,175 @@ class SegMapClassIdsMaskGen(IBatchwiseMaskGenerator):
         return mask
 
 
+class BoundingBoxesMaskGen(IBatchwiseMaskGenerator):
+    """Generator that produces masks highlighting bounding boxes.
+
+    This class produces for each row (i.e. image + bounding boxes) in a batch
+    a mask in which the inner areas of bounding box rectangles with given
+    labels are marked (i.e. set to ``1.0``). The labels may be provided as a
+    fixed list of strings or a stochastic parameter from which labels will be
+    sampled. If no labels are provided, all bounding boxes will be marked.
+
+    A pixel will be set to ``1.0`` if *at least* one bounding box at that
+    location has one of the requested labels, even if there is *also* one
+    bounding box at that location with a not requested label.
+
+    .. note::
+
+        This class will produce an ``AssertionError`` if there are no
+        bounding boxes in a batch.
+
+    Parameters
+    ----------
+    labels : None or str or list of str or imgaug.parameters.StochasticParameter
+        Labels of bounding boxes to select for.
+
+        If `nb_sample_labels` is ``None`` then this is expected to be either
+        also ``None`` (select all BBs) or a single ``str`` (select BBs with
+        this one label) or a ``list`` of ``str`` s (always select BBs with
+        these labels).
+
+        If `nb_sample_labels` is set, then this parameter will be treated
+        as a stochastic parameter with the following valid types:
+
+            * If ``None``: Ignore the sampling count  and always use all
+              bounding boxes.
+            * If ``str``: Exactly that label will be used for all
+              images.
+            * If ``list`` of ``str``: ``N`` random values will be picked per
+              image from that list and used as the labels.
+            * If ``StochasticParameter``: That parameter will be queried once
+              per batch for ``(sum(N),)`` values.
+
+        ``N`` denotes the number of labels to sample per segmentation
+        map (derived from `nb_sample_labels`) and ``sum(N)`` denotes the
+        sum of ``N`` s over all images.
+
+    nb_sample_labels : None or tuple of int or list of int or imgaug.parameters.StochasticParameter, optional
+        Number of labels to sample (with replacement) per image.
+        As sampling happens with replacement, fewer *unique* labels may be
+        sampled.
+
+            * If ``None``: `labels` is expected to also be ``None`` or a fixed
+              value of labels to be used for all images.
+            * If ``int``: Exactly that many labels will be sampled for all
+              images.
+            * If ``tuple`` ``(a, b)``: A random value will be uniformly
+              sampled per image from the discrete interval ``[a..b]``.
+            * If ``list``: A random value will be picked per image from
+              that list.
+            * If ``StochasticParameter``: That parameter will be queried once
+              per batch for ``(B,)`` values, where ``B`` is the number of
+              images.
+
+    """
+
+    def __init__(self, labels=None, nb_sample_labels=None):
+        if labels is None:
+            self.labels = None
+            self.nb_sample_labels = None
+        elif nb_sample_labels is None:
+            if ia.is_string(labels):
+                labels = [labels]
+            assert isinstance(labels, list), (
+                "Expected `labels` a single string or a list of "
+                "strings if `nb_sample_labels` is None. Got type `%s`. "
+                "Set `nb_sample_labels` to e.g. an integer to enable "
+                "stochastic parameters for `labels`." % (
+                    type(labels).__name__,))
+            self.labels = labels
+            self.nb_sample_labels = None
+        else:
+            self.labels = iap.handle_categorical_string_param(labels, "labels")
+            self.nb_sample_labels = iap.handle_discrete_param(
+                nb_sample_labels, "nb_sample_labels", value_range=(0, None),
+                tuple_to_uniform=True, list_to_choice=True,
+                allow_floats=False)
+
+    def draw_masks(self, batch, random_state=None):
+        """
+        See :func:`imgaug.augmenters.blend.IBatchwiseMaskGenerator.draw_masks`.
+
+        """
+        assert batch.bounding_boxes is not None, (
+            "Can only generate masks for batches that contain bounding boxes, "
+            "but got a batch without them.")
+        random_state = iarandom.RNG(random_state)
+
+        if self.labels is None:
+            return [self.generate_mask(bbsoi, None)
+                    for bbsoi in batch.bounding_boxes]
+
+        labels = self._draw_samples(batch.nb_rows, random_state=random_state)
+
+        return [self.generate_mask(bbsoi, labels_i)
+                for bbsoi, labels_i
+                in zip(batch.bounding_boxes, labels)]
+
+    def _draw_samples(self, nb_rows, random_state):
+        nb_sample_labels = self.nb_sample_labels
+        if nb_sample_labels is None:
+            assert isinstance(self.labels, list), (
+                "Expected list got %s." % (type(self.labels).__name__,))
+            return [self.labels] * nb_rows
+
+        nb_sample_labels = nb_sample_labels.draw_samples(
+            (nb_rows,), random_state=random_state)
+        nb_sample_labels = np.clip(nb_sample_labels, 0, None)
+        labels_raw = self.labels.draw_samples(
+            (np.sum(nb_sample_labels),),
+            random_state=random_state)
+
+        labels = []
+        ith_entry = 0
+        for nb_sample_labels_i in nb_sample_labels:
+            start = ith_entry
+            end = start + nb_sample_labels_i
+            labels.append(labels_raw[start:end])
+            ith_entry += nb_sample_labels_i
+
+        return labels
+
+    # TODO this could be simplified to something like
+    #      bbsoi.only_labels(labels).draw_mask()
+    @classmethod
+    def generate_mask(cls, bbsoi, labels):
+        """Generate a mask of the areas of bounding boxes with given labels.
+
+        Parameters
+        ----------
+        bbsoi : imgaug.augmentables.bbs.BoundingBoxesOnImage
+            The bounding boxes for which to generate the mask.
+
+        labels : None or iterable of str
+            Labels of the bounding boxes to set to ``1.0``.
+            For an ``(x, y)`` position, it is enough that *any* bounding box
+            at the given location has one of the labels.
+            If this is ``None``, all bounding boxes will be marked.
+
+        Returns
+        -------
+        ndarray
+            ``float32`` mask array with same height and width as
+            ``segmap.shape``. Values are in ``[0.0, 1.0]``.
+
+        """
+        labels = set(labels) if labels is not None else None
+        height, width = bbsoi.shape[0:2]
+        mask = np.zeros((height, width), dtype=np.float32)
+
+        for bb in bbsoi:
+            if labels is None or bb.label in labels:
+                x1 = min(max(int(bb.x1), 0), width)
+                y1 = min(max(int(bb.y1), 0), height)
+                x2 = min(max(int(bb.x2), 0), width)
+                y2 = min(max(int(bb.y2), 0), height)
+                if x1 < x2 and y1 < y2:
+                    mask[y1:y2, x1:x2] = 1.0
+
+        return mask
+
+
 class InvertMaskGen(IBatchwiseMaskGenerator):
     """Generator that inverts the outputs of other mask generators.
 

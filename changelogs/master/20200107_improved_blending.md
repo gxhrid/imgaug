@@ -15,6 +15,8 @@
   gradient mask generator for `BlendAlphaMask`.
 * Added `imgaug.augmenters.blend.SegMapClassIdsMaskGen`, a segmentation
   map-based mask generator for `BlendAlphaMask`.
+* Added `imgaug.augmenters.blend.BoundingBoxesMaskGen`, a bounding box-based
+  mask generator for `BlendAlphaMask`.
 * Added `imgaug.augmenters.blend.InvertMaskGen`, an mask-inverting mask
   generator for `BlendAlphaMask`.
 * Changed `imgaug.parameters.SimplexNoise` and

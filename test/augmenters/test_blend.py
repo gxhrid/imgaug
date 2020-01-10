@@ -2722,6 +2722,138 @@ class TestSegMapClassIdsMaskGen(unittest.TestCase):
             _mask = gen.draw_masks(batch)[0]
 
 
+class TestBoundingBoxesMaskGen(unittest.TestCase):
+    def setUp(self):
+        reseed()
+
+    def test___init___no_labels(self):
+        gen = iaa.BoundingBoxesMaskGen()
+        assert gen.labels is None
+        assert gen.nb_sample_labels is None
+
+    def test___init___fixed_labels_single_str(self):
+        gen = iaa.BoundingBoxesMaskGen("person")
+        assert gen.labels == ["person"]
+        assert gen.nb_sample_labels is None
+
+    def test___init___fixed_labels_list(self):
+        gen = iaa.BoundingBoxesMaskGen(["person", "car"])
+        assert gen.labels == ["person", "car"]
+        assert gen.nb_sample_labels is None
+
+    def test___init___labels_stochastic(self):
+        gen = iaa.BoundingBoxesMaskGen(["person", "car"], nb_sample_labels=2)
+        assert isinstance(gen.labels, iap.Choice)
+        assert isinstance(gen.nb_sample_labels, iap.Deterministic)
+
+    def test_draw_masks__labels_is_none(self):
+        bbs = [ia.BoundingBox(x1=1, y1=1, x2=5, y2=5, label="bb1"),
+               ia.BoundingBox(x1=-3, y1=4, x2=20, y2=8, label="bb2"),
+               ia.BoundingBox(x1=2, y1=2, x2=10, y2=10, label="bb3")]
+        bbsoi = ia.BoundingBoxesOnImage(bbs, shape=(10, 14, 3))
+
+        batch = ia.BatchInAugmentation(bounding_boxes=[bbsoi])
+        gen = iaa.BoundingBoxesMaskGen()
+
+        mask = gen.draw_masks(batch, random_state=1)[0]
+
+        expected = np.zeros((10, 14), dtype=np.float32)
+        expected[1:5, 1:5] = 1.0  # bb1
+        expected[4:8, 0:14] = 1.0  # bb2 clipped to image shape
+        expected[2:10, 2:10] = 1.0  # bb3
+        assert mask.shape == (10, 14)
+        assert mask.dtype.name == "float32"
+        assert np.allclose(mask, expected)
+
+    def test_draw_masks__fixed_labels(self):
+        bbs = [ia.BoundingBox(x1=1, y1=1, x2=5, y2=5, label="bb1"),
+               ia.BoundingBox(x1=-3, y1=4, x2=20, y2=8, label="bb2"),
+               ia.BoundingBox(x1=2, y1=2, x2=10, y2=10, label="bb3")]
+        bbsoi = ia.BoundingBoxesOnImage(bbs, shape=(10, 14, 3))
+
+        batch = ia.BatchInAugmentation(bounding_boxes=[bbsoi])
+        gen = iaa.BoundingBoxesMaskGen(["bb1", "bb2"])
+
+        mask = gen.draw_masks(batch, random_state=1)[0]
+
+        expected = np.zeros((10, 14), dtype=np.float32)
+        expected[1:5, 1:5] = 1.0  # bb1
+        expected[4:8, 0:14] = 1.0  # bb2 clipped to image shape
+        assert mask.shape == (10, 14)
+        assert mask.dtype.name == "float32"
+        assert np.allclose(mask, expected)
+
+    def test_draw_masks__stochastic_labels(self):
+        bbs = [ia.BoundingBox(x1=1, y1=1, x2=5, y2=5, label="bb1"),
+               ia.BoundingBox(x1=-3, y1=4, x2=20, y2=8, label="bb2"),
+               ia.BoundingBox(x1=2, y1=2, x2=10, y2=10, label="bb3")]
+        bbsoi = ia.BoundingBoxesOnImage(bbs, shape=(10, 14, 3))
+
+        batch = ia.BatchInAugmentation(bounding_boxes=[bbsoi])
+        gen = iaa.BoundingBoxesMaskGen(
+            iap.DeterministicList(["bb1", "bb2"]),
+            nb_sample_labels=3)
+
+        mask = gen.draw_masks(batch, random_state=1)[0]
+
+        expected = np.zeros((10, 14), dtype=np.float32)
+        expected[1:5, 1:5] = 1.0  # bb1
+        expected[4:8, 0:14] = 1.0  # bb2 clipped to image shape
+        assert mask.shape == (10, 14)
+        assert mask.dtype.name == "float32"
+        assert np.allclose(mask, expected)
+
+    def test_generate_mask(self):
+        bbs = [ia.BoundingBox(x1=1, y1=1, x2=5, y2=5, label="bb1"),
+               ia.BoundingBox(x1=-3, y1=4, x2=20, y2=8, label="bb2"),
+               ia.BoundingBox(x1=2, y1=2, x2=10, y2=10, label="bb3")]
+        bbsoi = ia.BoundingBoxesOnImage(bbs, shape=(10, 14, 3))
+
+        mask = iaa.BoundingBoxesMaskGen.generate_mask(bbsoi, ["bb1", "bb2"])
+
+        expected = np.zeros((10, 14), dtype=np.float32)
+        expected[1:5, 1:5] = 1.0  # bb1
+        expected[4:8, 0:14] = 1.0  # bb2 clipped to image shape
+        assert mask.shape == (10, 14)
+        assert mask.dtype.name == "float32"
+        assert np.allclose(mask, expected)
+
+    def test_zero_sized_axes(self):
+        shapes = [
+            (0, 0),
+            (0, 1),
+            (1, 0),
+            (0, 1, 0),
+            (1, 0, 0),
+            (0, 1, 1),
+            (1, 0, 1)
+        ]
+
+        for shape in shapes:
+            with self.subTest(shape=shape):
+                bbs = [ia.BoundingBox(x1=1, y1=1, x2=5, y2=5, label="bb1"),
+                       ia.BoundingBox(x1=-3, y1=4, x2=20, y2=8, label="bb2"),
+                       ia.BoundingBox(x1=2, y1=2, x2=10, y2=10, label="bb3")]
+                bbsoi = ia.BoundingBoxesOnImage(bbs, shape=shape)
+                batch = ia.BatchInAugmentation(bounding_boxes=[bbsoi])
+                gen = iaa.BoundingBoxesMaskGen("bb1")
+
+                mask = gen.draw_masks(batch)[0]
+
+                assert mask.shape == shape[0:2]
+                assert mask.dtype.name == "float32"
+                assert np.allclose(mask, 0.0)
+
+    def test_batch_contains_no_bounding_boxes(self):
+        hms = ia.HeatmapsOnImage(np.zeros((5, 5), dtype=np.float32),
+                                 shape=(10, 10, 3))
+        batch = ia.BatchInAugmentation(heatmaps=[hms])
+        gen = iaa.SegMapClassIdsMaskGen(class_ids=[1])
+
+        with self.assertRaises(AssertionError):
+            _mask = gen.draw_masks(batch)[0]
+
+
 class InvertMaskGen(unittest.TestCase):
     def setUp(self):
         reseed()
