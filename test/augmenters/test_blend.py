@@ -853,8 +853,9 @@ class TestBlendAlpha(unittest.TestCase):
 
     @classmethod
     def _test_cba_factor_is_0501(cls, augf_name, cbaoi):
-        aug = iaa.BlendAlpha(0.501, iaa.Identity(),
-                        iaa.Affine(translate_px={"x": 1}))
+        aug = iaa.BlendAlpha(0.501,
+                             iaa.Identity(),
+                             iaa.Affine(translate_px={"x": 1}))
 
         observed = getattr(aug, augf_name)([cbaoi])
 
@@ -872,8 +873,9 @@ class TestBlendAlpha(unittest.TestCase):
 
     @classmethod
     def _test_cba_factor_is_0499(cls, augf_name, cbaoi):
-        aug = iaa.BlendAlpha(0.499, iaa.Identity(),
-                        iaa.Affine(translate_px={"x": 1}))
+        aug = iaa.BlendAlpha(0.499,
+                             iaa.Identity(),
+                             iaa.Affine(translate_px={"x": 1}))
 
         observed = getattr(aug, augf_name)([cbaoi])
 
@@ -942,8 +944,9 @@ class TestBlendAlpha(unittest.TestCase):
     @classmethod
     def _test_empty_cba(cls, augf_name, cbaoi):
         # empty CBAs
-        aug = iaa.BlendAlpha(0.501, iaa.Identity(),
-                        iaa.Affine(translate_px={"x": 1}))
+        aug = iaa.BlendAlpha(0.501,
+                             iaa.Identity(),
+                             iaa.Affine(translate_px={"x": 1}))
 
         observed = getattr(aug, augf_name)(cbaoi)
 
@@ -1978,8 +1981,8 @@ class TestBlendAlphaSegMapClassIds(unittest.TestCase):
                 assert image_aug.shape == shape
 
     def test_pickleable(self):
-        shape=(15, 15, 3)
-        iterations=3
+        shape = (15, 15, 3)
+        iterations = 3
         augmenter = iaa.BlendAlphaSegMapClassIds(
             [1, 2],
             foreground=iaa.Add((1, 10), random_state=1),
@@ -2004,7 +2007,8 @@ class TestBlendAlphaSegMapClassIds(unittest.TestCase):
 
 
 class TestStochasticParameterMaskGen(unittest.TestCase):
-    def _test_draw_masks_nhwc(self, shape):
+    @classmethod
+    def _test_draw_masks_nhwc(cls, shape):
         batch = ia.BatchInAugmentation(
             images=np.zeros(shape, dtype=np.uint8)
         )
@@ -2718,7 +2722,7 @@ class TestSegMapClassIdsMaskGen(unittest.TestCase):
         gen = iaa.SegMapClassIdsMaskGen(class_ids=[1])
 
         with self.assertRaises(AssertionError):
-            mask = gen.draw_masks(batch)[0]
+            _mask = gen.draw_masks(batch)[0]
 
 
 class InvertMaskGen(unittest.TestCase):
