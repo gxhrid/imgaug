@@ -2608,7 +2608,7 @@ class SegMapClassIdsMaskGen(IBatchwiseMaskGenerator):
         class_ids = self._draw_samples(batch.nb_rows,
                                        random_state=random_state)
 
-        return [self.generate_mask(segmap.arr, class_ids_i, segmap.shape)
+        return [self.generate_mask(segmap, class_ids_i)
                 for segmap, class_ids_i
                 in zip(batch.segmentation_maps, class_ids)]
 
@@ -2637,16 +2637,16 @@ class SegMapClassIdsMaskGen(IBatchwiseMaskGenerator):
         return class_ids
 
     @classmethod
-    def generate_mask(cls, segmap_arr, class_ids, output_shape):
-        mask = np.zeros(segmap_arr.shape[0:2], dtype=bool)
+    def generate_mask(cls, segmap, class_ids):
+        mask = np.zeros(segmap.arr.shape[0:2], dtype=bool)
 
         for class_id in class_ids:
             # note that segmap has shape (H,W,C), so we max() along C
-            mask_i = np.any(segmap_arr == class_id, axis=2)
+            mask_i = np.any(segmap.arr == class_id, axis=2)
             mask = np.logical_or(mask, mask_i)
 
         mask = mask.astype(np.float32)
-        mask = ia.imresize_single_image(mask, output_shape[0:2])
+        mask = ia.imresize_single_image(mask, segmap.shape[0:2])
 
         return mask
 

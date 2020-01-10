@@ -2650,10 +2650,9 @@ class TestSegMapClassIdsMaskGen(unittest.TestCase):
         segmap_arr[1, 0, 0] = 1
         segmap_arr[0, 0, 1] = 3
         segmap_arr[1, 1, 1] = 3
+        segmap = ia.SegmentationMapsOnImage(segmap_arr, shape=(3, 2, 3))
 
-        mask = iaa.SegMapClassIdsMaskGen.generate_mask(segmap_arr,
-                                                       [1, 2],
-                                                       (3, 2))
+        mask = iaa.SegMapClassIdsMaskGen.generate_mask(segmap, [1, 2])
 
         expected = np.float32([
             [1.0, 1.0],
@@ -2669,10 +2668,9 @@ class TestSegMapClassIdsMaskGen(unittest.TestCase):
         segmap_arr[1, 0, 0] = 1
         segmap_arr[0, 0, 1] = 3
         segmap_arr[1, 1, 1] = 3
+        segmap = ia.SegmentationMapsOnImage(segmap_arr, shape=(3, 4))
 
-        mask = iaa.SegMapClassIdsMaskGen.generate_mask(segmap_arr,
-                                                       [1, 2],
-                                                       (3, 4))
+        mask = iaa.SegMapClassIdsMaskGen.generate_mask(segmap, [1, 2])
 
         expected = np.float32([
             [1.0, 1.0, 1.0, 1.0],
