@@ -2365,6 +2365,7 @@ class HorizontalLinearGradientMaskGen(_LinearGradientMaskGen):
         Datatypes are analogous to `min_value`.
 
     """
+
     def __init__(self, min_value=(0.0, 0.2), max_value=(0.8, 1.0),
                  start_at=(0.0, 0.2), end_at=(0.8, 1.0)):
         super(HorizontalLinearGradientMaskGen, self).__init__(
@@ -2458,6 +2459,7 @@ class VerticalLinearGradientMaskGen(_LinearGradientMaskGen):
         Datatypes are analogous to `min_value`.
 
     """
+
     def __init__(self, min_value=(0.0, 0.2), max_value=(0.8, 1.0),
                  start_at=(0.0, 0.2), end_at=(0.8, 1.0)):
         super(VerticalLinearGradientMaskGen, self).__init__(
@@ -2574,6 +2576,7 @@ class SegMapClassIdsMaskGen(IBatchwiseMaskGenerator):
               segmentation maps.
 
     """
+
     def __init__(self, class_ids, nb_sample_classes=None):
         if nb_sample_classes is None:
             if ia.is_single_integer(class_ids):
