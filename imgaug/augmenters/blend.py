@@ -17,11 +17,10 @@ List of augmenters:
 """
 from __future__ import print_function, division, absolute_import
 
-from abc import ABCMeta, abstractmethod
+from abc import ABCMeta
 
 import numpy as np
 import six
-import six.moves as sm
 import cv2
 
 import imgaug as ia
