@@ -40,5 +40,6 @@ def main():
         ia.imshow(ia.draw_grid(aug(images=[img]*25), cols=5, rows=5))
         ia.imshow(ia.draw_grid(aug2(images=[img]*25), cols=5, rows=5))
 
+
 if __name__ == "__main__":
     main()
