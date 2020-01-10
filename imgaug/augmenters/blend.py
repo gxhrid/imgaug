@@ -2793,7 +2793,7 @@ class RegularGridMaskGen(IBatchwiseMaskGenerator):
         """
         random_state = iarandom.RNG(random_state)
         shapes = batch.get_rowwise_shapes()
-        nb_rows, nb_cols, alpha = self._draw_samples(batch.nb_rows,
+        nb_rows, nb_cols, alpha = self._draw_samples(len(shapes),
                                                      random_state=random_state)
 
         return [self.generate_mask(shape, nb_rows_i, nb_cols_i, alpha_i)
@@ -2908,14 +2908,17 @@ class CheckerboardMaskGen(IBatchwiseMaskGenerator):
     """
 
     def __init__(self, nb_rows, nb_cols):
-        self.nb_rows = iap.handle_discrete_param(
-            nb_rows, "nb_rows", value_range=(1, None),
-            tuple_to_uniform=True, list_to_choice=True,
-            allow_floats=False)
-        self.nb_cols = iap.handle_discrete_param(
-            nb_cols, "nb_cols", value_range=(1, None),
-            tuple_to_uniform=True, list_to_choice=True,
-            allow_floats=False)
+        self.grid = RegularGridMaskGen(nb_rows=nb_rows,
+                                       nb_cols=nb_cols,
+                                       alpha=1)
+
+    @property
+    def nb_rows(self):
+        return self.grid.nb_rows
+
+    @property
+    def nb_cols(self):
+        return self.grid.nb_cols
 
     def draw_masks(self, batch, random_state=None):
         """
@@ -2924,19 +2927,12 @@ class CheckerboardMaskGen(IBatchwiseMaskGenerator):
         """
         random_state = iarandom.RNG(random_state)
         shapes = batch.get_rowwise_shapes()
-        nb_rows, nb_cols = self._draw_samples(batch.nb_rows,
-                                              random_state=random_state)
+        nb_rows, nb_cols, _alpha = self.grid._draw_samples(
+            len(shapes), random_state=random_state)
 
         return [self.generate_mask(shape, nb_rows_i, nb_cols_i)
                 for shape, nb_rows_i, nb_cols_i
                 in zip(shapes, nb_rows, nb_cols)]
-
-    def _draw_samples(self, nb_images, random_state):
-        nb_rows = self.nb_rows.draw_samples((nb_images,),
-                                            random_state=random_state)
-        nb_cols = self.nb_cols.draw_samples((nb_images,),
-                                            random_state=random_state)
-        return nb_rows, nb_cols
 
     @classmethod
     def generate_mask(cls, shape, nb_rows, nb_cols):
@@ -2960,46 +2956,18 @@ class CheckerboardMaskGen(IBatchwiseMaskGenerator):
             ``segmap.shape``. Values are in ``[0.0, 1.0]``.
 
         """
-        from . import size as sizelib
-
         height, width = shape[0:2]
         if 0 in (height, width):
             return np.zeros((height, width), dtype=np.float32)
-
         nb_rows = min(max(nb_rows, 1), height)
         nb_cols = min(max(nb_cols, 1), width)
 
-        cell_height = int(height / nb_rows)
-        cell_width = int(width / nb_cols)
+        alphas = np.full((nb_cols,), 1.0, dtype=np.float32)
+        alphas[::2] = 0.0
+        alphas = np.tile(alphas[np.newaxis, :], (nb_rows, 1))
+        alphas[::2, :] = 1.0 - alphas[::2, :]
 
-        # row of <COLS> 1px cells
-        row = np.full((nb_cols,), 1.0, dtype=np.float32)
-
-        # invert every second column
-        row[::2] = 0.0
-
-        # extend to <ROWS> rows (each 1px width, 1px height)
-        rows = np.tile(row[np.newaxis, :], (nb_rows, 1))
-
-        # invert every second row
-        rows[::2, :] = 1.0 - rows[::2, :]
-
-        # extend 1px cells to full-sized cells
-        mask = np.repeat(rows, cell_height, axis=0)
-        mask = np.repeat(mask, cell_width, axis=1)
-
-        # if mask is too small, reflection pad it on all sides
-        missing_height = height - mask.shape[0]
-        missing_width = width - mask.shape[1]
-        top = int(np.floor(missing_height / 2))
-        bottom = int(np.ceil(missing_height / 2))
-        left = int(np.floor(missing_width / 2))
-        right = int(np.ceil(missing_width / 2))
-        mask = sizelib.pad(mask,
-                           top=top, right=right, bottom=bottom, left=left,
-                           mode="reflect")
-
-        return mask
+        return RegularGridMaskGen.generate_mask(shape, nb_rows, nb_cols, alphas)
 
 
 class SegMapClassIdsMaskGen(IBatchwiseMaskGenerator):
