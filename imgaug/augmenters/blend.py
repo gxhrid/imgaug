@@ -597,7 +597,6 @@ class BlendAlphaMask(meta.Augmenter):
             self, batch, hooks, parents)
 
         shapes = batch.get_rowwise_shapes()
-        nb_images = len(shapes)
         masks = self.mask_generator.draw_masks(batch, random_state)
 
         for i, (shape, mask) in enumerate(zip(shapes, masks)):
