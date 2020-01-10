@@ -2715,6 +2715,8 @@ class RegularGridMaskGen(IBatchwiseMaskGenerator):
             ``segmap.shape``. Values are in ``[0.0, 1.0]``.
 
         """
+        from . import size as sizelib
+
         height, width = shape[0:2]
         if 0 in (height, width):
             return np.zeros((height, width), dtype=np.float32)
@@ -2748,7 +2750,6 @@ class RegularGridMaskGen(IBatchwiseMaskGenerator):
         bottom = int(np.ceil(missing_height / 2))
         left = int(np.floor(missing_width / 2))
         right = int(np.ceil(missing_width / 2))
-        from . import size as sizelib
         mask = sizelib.pad(mask,
                            top=top, right=right, bottom=bottom, left=left,
                            mode="reflect")
