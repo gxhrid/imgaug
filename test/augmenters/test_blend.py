@@ -2095,7 +2095,6 @@ class TestStochasticParameterMaskGen(unittest.TestCase):
         for per_channel in [False, True]:
             for shape in shapes:
                 with self.subTest(per_channel=per_channel, shape=shape):
-                    image = np.zeros(shape, dtype=np.uint8)
                     batch = ia.BatchInAugmentation(
                         images=[np.zeros(shape, dtype=np.uint8)]
                     )
