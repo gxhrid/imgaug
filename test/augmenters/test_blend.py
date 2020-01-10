@@ -1918,6 +1918,64 @@ class TestBlendAlphaVerticalLinearGradient(unittest.TestCase):
         runtest_pickleable_uint8_img(aug, iterations=3)
 
 
+class TestBlendAlphaRegularGrid(unittest.TestCase):
+    def setUp(self):
+        reseed()
+
+    def test___init__(self):
+        child1 = iaa.Sequential([])
+        child2 = iaa.Sequential([])
+        aug = iaa.BlendAlphaRegularGrid(2, 3, child1, child2)
+        assert aug.mask_generator.nb_rows.value == 2
+        assert aug.mask_generator.nb_cols.value == 3
+        assert aug.foreground is child1
+        assert aug.background is child2
+        assert isinstance(aug.mask_generator,
+                          iaa.RegularGridMaskGen)
+
+    def test_single_image(self):
+        image = np.full((2, 6, 3), 255, dtype=np.uint8)
+
+        aug = iaa.BlendAlphaRegularGrid(nb_rows=1, nb_cols=3,
+                                        foreground=iaa.TotalDropout(1.0),)
+        image_aug = aug(image=image)
+
+        expected = np.copy(image)
+        expected[:, 0:2, :] = 0
+        expected[:, 4:6, :] = 0
+        assert np.array_equal(image_aug, expected)
+
+    def test_zero_sized_axes(self):
+        shapes = [
+            (0, 0),
+            (0, 1),
+            (1, 0),
+            (0, 1, 0),
+            (1, 0, 0),
+            (0, 1, 1),
+            (1, 0, 1)
+        ]
+
+        for shape in shapes:
+            with self.subTest(shape=shape):
+                image = np.full(shape, 0, dtype=np.uint8)
+                aug = iaa.BlendAlphaRegularGrid(
+                    nb_rows=2, nb_cols=3, foreground=iaa.TotalDropout(1.0))
+
+                image_aug = aug(image=image)
+
+                assert image_aug.dtype.name == "uint8"
+                assert image_aug.shape == shape
+
+    def test_pickleable(self):
+        aug = iaa.BlendAlphaRegularGrid(
+            2, 3,
+            iaa.Add((1, 10), random_state=1),
+            iaa.Add((11, 20), random_state=2),
+            random_state=3)
+        runtest_pickleable_uint8_img(aug, iterations=3)
+
+
 class TestBlendAlphaSegMapClassIds(unittest.TestCase):
     def setUp(self):
         reseed()

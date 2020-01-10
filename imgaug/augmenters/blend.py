@@ -1956,6 +1956,96 @@ class BlendAlphaBoundingBoxes(BlendAlphaMask):
         )
 
 
+class BlendAlphaRegularGrid(BlendAlphaMask):
+    """Blend images from two branches according to a regular grid.
+
+    This class generates for each image a mask following a regular grid of
+    ``H`` rows and ``W`` columns. Each column is then filled with either
+    ``1.0`` or ``0.0``. The cell at the top-left is always ``1.0``. Its right
+    and bottom neighbour cells are ``0.0``.
+
+    This class is a thin wrapper around
+    :class:`imgaug.augmenters.blend.BlendAlphaMask` together with
+    :class:`imgaug.augmenters.blend.RegularGridMaskGen`.
+
+    .. note::
+
+        Avoid using augmenters as children that affect pixel locations (e.g.
+        horizontal flips). See
+        :class:`imgaug.augmenters.blend.BlendAlphaMask` for details.
+
+    dtype support::
+
+        See :class:`imgaug.augmenters.blend.BlendAlphaMask`.
+
+    Parameters
+    ----------
+    nb_rows : int or tuple of int or list of int or imgaug.parameters.StochasticParameter, optional
+        Number of rows of the checkerboard.
+        See :class:`imgaug.augmenters.blend.RegularGridMaskGen` for details.
+
+    nb_cols : int or tuple of int or list of int or imgaug.parameters.StochasticParameter, optional
+        Number of columns of the checkerboard. Analogous to `nb_rows`.
+        See :class:`imgaug.augmenters.blend.RegularGridMaskGen` for details.
+
+    foreground : None or imgaug.augmenters.meta.Augmenter or iterable of imgaug.augmenters.meta.Augmenter, optional
+        Augmenter(s) that make up the foreground branch.
+        High alpha values will show this branch's results.
+
+            * If ``None``, then the input images will be reused as the output
+              of the foreground branch.
+            * If ``Augmenter``, then that augmenter will be used as the branch.
+            * If iterable of ``Augmenter``, then that iterable will be
+              converted into a ``Sequential`` and used as the augmenter.
+
+    background : None or imgaug.augmenters.meta.Augmenter or iterable of imgaug.augmenters.meta.Augmenter, optional
+        Augmenter(s) that make up the background branch.
+        Low alpha values will show this branch's results.
+
+            * If ``None``, then the input images will be reused as the output
+              of the background branch.
+            * If ``Augmenter``, then that augmenter will be used as the branch.
+            * If iterable of ``Augmenter``, then that iterable will be
+              converted into a ``Sequential`` and used as the augmenter.
+
+    name : None or str, optional
+        See :func:`imgaug.augmenters.meta.Augmenter.__init__`.
+
+    deterministic : bool, optional
+        See :func:`imgaug.augmenters.meta.Augmenter.__init__`.
+
+    random_state : None or int or imgaug.random.RNG or numpy.random.Generator or numpy.random.BitGenerator or numpy.random.SeedSequence or numpy.random.RandomState, optional
+        See :func:`imgaug.augmenters.meta.Augmenter.__init__`.
+
+    Examples
+    --------
+    >>> import imgaug.augmenters as iaa
+    >>> aug = iaa.BlendAlphaRegularGrid(nb_rows=2, nb_cols=(1, 4),
+    >>>                                 foreground=iaa.Grayscale(1.0))
+
+    Create an augmenter that places a ``HxW`` grid on each image, where
+    ``H`` (rows) is always ``2`` and ``W`` is randomly and uniformly sampled
+    from the interval ``[1, 4]``. Half of the cells in that grid are
+    grayscaled, the other half is unaltered.
+
+    """
+
+    def __init__(self, nb_rows, nb_cols,
+                 foreground=None, background=None,
+                 name=None, deterministic=False, random_state=None):
+        super(BlendAlphaRegularGrid, self).__init__(
+            RegularGridMaskGen(
+                nb_rows=nb_rows,
+                nb_cols=nb_cols
+            ),
+            foreground=foreground,
+            background=background,
+            name=name,
+            deterministic=deterministic,
+            random_state=random_state
+        )
+
+
 @six.add_metaclass(ABCMeta)
 class IBatchwiseMaskGenerator(object):
     """Interface for classes generating masks for batches.
