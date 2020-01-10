@@ -2638,6 +2638,124 @@ class VerticalLinearGradientMaskGen(_LinearGradientMaskGen):
             end_at=end_at)
 
 
+class RegularGridMaskGen(IBatchwiseMaskGenerator):
+    """Generate masks following a checkerboard-like pattern.
+
+    This mask generator splits each image into a regular grid of ``H`` rows
+    and ``W`` columns. Each column is then filled with either ``1.0`` or
+    ``0.0``. The cell at the top-left is always ``1.0``. Its right and bottom
+    neighbour cells are ``0.0``.
+
+    Parameters
+    ----------
+    nb_rows : int or tuple of int or list of int or imgaug.parameters.StochasticParameter, optional
+        Number of rows of the checkerboard.
+
+            * If ``int``: Exactly that value will be used for all images.
+            * If ``tuple`` ``(a, b)``: A random value will be uniformly sampled
+              per image from the discrete interval ``[a..b]``.
+            * If ``list``: A random value will be picked per image from that
+              list.
+            * If ``StochasticParameter``: That parameter will be queried once
+              per batch for ``(N,)`` values -- one per image.
+
+    nb_cols : int or tuple of int or list of int or imgaug.parameters.StochasticParameter, optional
+        Number of columns of the checkerboard. Analogous to `nb_rows`.
+
+    """
+
+    def __init__(self, nb_rows, nb_cols):
+        self.nb_rows = iap.handle_discrete_param(
+            nb_rows, "nb_rows", value_range=(1, None),
+            tuple_to_uniform=True, list_to_choice=True,
+            allow_floats=False)
+        self.nb_cols = iap.handle_discrete_param(
+            nb_cols, "nb_cols", value_range=(1, None),
+            tuple_to_uniform=True, list_to_choice=True,
+            allow_floats=False)
+
+    def draw_masks(self, batch, random_state=None):
+        """
+        See :func:`imgaug.augmenters.blend.IBatchwiseMaskGenerator.draw_masks`.
+
+        """
+        random_state = iarandom.RNG(random_state)
+        shapes = batch.get_rowwise_shapes()
+        nb_rows, nb_cols = self._draw_samples(batch.nb_rows,
+                                              random_state=random_state)
+
+        return [self.generate_mask(shape, nb_rows_i, nb_cols_i)
+                for shape, nb_rows_i, nb_cols_i
+                in zip(shapes, nb_rows, nb_cols)]
+
+    def _draw_samples(self, nb_images, random_state):
+        nb_rows = self.nb_rows.draw_samples((nb_images,),
+                                            random_state=random_state)
+        nb_cols = self.nb_cols.draw_samples((nb_images,),
+                                            random_state=random_state)
+        return nb_rows, nb_cols
+
+    @classmethod
+    def generate_mask(cls, shape, nb_rows, nb_cols):
+        """Generate a mask following a checkerboard pattern.
+
+        Parameters
+        ----------
+        shape : tuple of int
+
+
+        nb_rows : int
+
+        nb_cols : int
+
+        Returns
+        -------
+        ndarray
+            ``float32`` mask array with same height and width as
+            ``segmap.shape``. Values are in ``[0.0, 1.0]``.
+
+        """
+        height, width = shape[0:2]
+        if 0 in (height, width):
+            return np.zeros((height, width), dtype=np.float32)
+
+        nb_rows = min(max(nb_rows, 1), height)
+        nb_cols = min(max(nb_cols, 1), width)
+
+        cell_height = int(height / nb_rows)
+        cell_width = int(width / nb_cols)
+
+        # row of <COLS> 1px cells
+        row = np.full((nb_cols,), 1.0, dtype=np.float32)
+
+        # invert every second column
+        row[::2] = 0.0
+
+        # extend to <ROWS> rows (each 1px width, 1px height)
+        rows = np.tile(row[np.newaxis, :], (nb_rows, 1))
+
+        # invert every second row
+        rows[::2, :] = 1.0 - rows[::2, :]
+
+        # extend 1px cells to full-sized cells
+        mask = np.repeat(rows, cell_height, axis=0)
+        mask = np.repeat(mask, cell_width, axis=1)
+
+        # if mask is too small, reflection pad it on all sides
+        missing_height = height - mask.shape[0]
+        missing_width = width - mask.shape[1]
+        top = int(np.floor(missing_height / 2))
+        bottom = int(np.ceil(missing_height / 2))
+        left = int(np.floor(missing_width / 2))
+        right = int(np.ceil(missing_width / 2))
+        from . import size as sizelib
+        mask = sizelib.pad(mask,
+                           top=top, right=right, bottom=bottom, left=left,
+                           mode="reflect")
+
+        return mask
+
+
 class SegMapClassIdsMaskGen(IBatchwiseMaskGenerator):
     """Generator that produces masks highlighting segmentation map classes.
 

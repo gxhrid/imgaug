@@ -17,6 +17,8 @@
   map-based mask generator for `BlendAlphaMask`.
 * Added `imgaug.augmenters.blend.BoundingBoxesMaskGen`, a bounding box-based
   mask generator for `BlendAlphaMask`.
+* Added `imgaug.augmenters.blend.RegularGridMaskGen`, a checkerboard-like
+  mask generator for `BlendAlphaMask`.
 * Added `imgaug.augmenters.blend.InvertMaskGen`, an mask-inverting mask
   generator for `BlendAlphaMask`.
 * Changed `imgaug.parameters.SimplexNoise` and
