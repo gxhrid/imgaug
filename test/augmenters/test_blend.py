@@ -1918,26 +1918,26 @@ class TestBlendAlphaVerticalLinearGradient(unittest.TestCase):
         runtest_pickleable_uint8_img(aug, iterations=3)
 
 
-class TestBlendAlphaRegularGrid(unittest.TestCase):
+class TestBlendAlphaCheckerboard(unittest.TestCase):
     def setUp(self):
         reseed()
 
     def test___init__(self):
         child1 = iaa.Sequential([])
         child2 = iaa.Sequential([])
-        aug = iaa.BlendAlphaRegularGrid(2, 3, child1, child2)
+        aug = iaa.BlendAlphaCheckerboard(2, 3, child1, child2)
         assert aug.mask_generator.nb_rows.value == 2
         assert aug.mask_generator.nb_cols.value == 3
         assert aug.foreground is child1
         assert aug.background is child2
         assert isinstance(aug.mask_generator,
-                          iaa.RegularGridMaskGen)
+                          iaa.CheckerboardMaskGen)
 
     def test_single_image(self):
         image = np.full((2, 6, 3), 255, dtype=np.uint8)
 
-        aug = iaa.BlendAlphaRegularGrid(nb_rows=1, nb_cols=3,
-                                        foreground=iaa.TotalDropout(1.0),)
+        aug = iaa.BlendAlphaCheckerboard(nb_rows=1, nb_cols=3,
+                                         foreground=iaa.TotalDropout(1.0), )
         image_aug = aug(image=image)
 
         expected = np.copy(image)
@@ -1959,7 +1959,7 @@ class TestBlendAlphaRegularGrid(unittest.TestCase):
         for shape in shapes:
             with self.subTest(shape=shape):
                 image = np.full(shape, 0, dtype=np.uint8)
-                aug = iaa.BlendAlphaRegularGrid(
+                aug = iaa.BlendAlphaCheckerboard(
                     nb_rows=2, nb_cols=3, foreground=iaa.TotalDropout(1.0))
 
                 image_aug = aug(image=image)
@@ -1968,7 +1968,7 @@ class TestBlendAlphaRegularGrid(unittest.TestCase):
                 assert image_aug.shape == shape
 
     def test_pickleable(self):
-        aug = iaa.BlendAlphaRegularGrid(
+        aug = iaa.BlendAlphaCheckerboard(
             2, 3,
             iaa.Add((1, 10), random_state=1),
             iaa.Add((11, 20), random_state=2),
@@ -2713,15 +2713,15 @@ class TestVerticalLinearGradientMaskGen(unittest.TestCase):
                            rtol=0, atol=0.025)
 
 
-class TestRegularGridMaskGen(unittest.TestCase):
+class TestCheckerboardMaskGen(unittest.TestCase):
     def test___init__(self):
-        gen = iaa.RegularGridMaskGen(nb_rows=2, nb_cols=[1, 3])
+        gen = iaa.CheckerboardMaskGen(nb_rows=2, nb_cols=[1, 3])
         assert gen.nb_rows.value == 2
         assert gen.nb_cols.a == [1, 3]
 
     def test_draw_masks(self):
-        gen = iaa.RegularGridMaskGen(nb_rows=2,
-                                     nb_cols=iap.DeterministicList([1, 4]))
+        gen = iaa.CheckerboardMaskGen(nb_rows=2,
+                                      nb_cols=iap.DeterministicList([1, 4]))
         image = np.zeros((6, 8, 3), dtype=np.uint8)
         batch = ia.BatchInAugmentation(images=[image, image])
 
@@ -2739,29 +2739,29 @@ class TestRegularGridMaskGen(unittest.TestCase):
         assert np.allclose(masks[1], expected2)
 
     def test_generate_mask_rows_1_cols_1(self):
-        mask = iaa.RegularGridMaskGen.generate_mask((5, 7),
-                                                    nb_rows=1, nb_cols=1)
+        mask = iaa.CheckerboardMaskGen.generate_mask((5, 7),
+                                                     nb_rows=1, nb_cols=1)
         assert np.allclose(mask, 1.0)
 
     def test_generate_mask_rows_1_cols_n(self):
-        mask = iaa.RegularGridMaskGen.generate_mask((5, 8),
-                                                    nb_rows=1, nb_cols=4)
+        mask = iaa.CheckerboardMaskGen.generate_mask((5, 8),
+                                                     nb_rows=1, nb_cols=4)
         expected = np.full((5, 8), 1.0, dtype=np.float32)
         expected[:, 2:4] = 0.0
         expected[:, 6:8] = 0.0
         assert np.allclose(mask, expected)
 
     def test_generate_mask_rows_n_cols_1(self):
-        mask = iaa.RegularGridMaskGen.generate_mask((8, 5),
-                                                    nb_rows=4, nb_cols=1)
+        mask = iaa.CheckerboardMaskGen.generate_mask((8, 5),
+                                                     nb_rows=4, nb_cols=1)
         expected = np.full((8, 5), 1.0, dtype=np.float32)
         expected[2:4, :] = 0.0
         expected[6:8, :] = 0.0
         assert np.allclose(mask, expected)
 
     def test_generate_mask_rows_n_cols_n(self):
-        mask = iaa.RegularGridMaskGen.generate_mask((6, 8),
-                                                    nb_rows=3, nb_cols=2)
+        mask = iaa.CheckerboardMaskGen.generate_mask((6, 8),
+                                                     nb_rows=3, nb_cols=2)
         expected = np.full((6, 8), 1.0, dtype=np.float32)
         expected[0:2, 0:4] = 1.0
         expected[0:2, 4:8] = 0.0
@@ -2772,8 +2772,8 @@ class TestRegularGridMaskGen(unittest.TestCase):
         assert np.allclose(mask, expected)
 
     def test_generate_mask_with_leftover_pixels(self):
-        mask = iaa.RegularGridMaskGen.generate_mask((15, 15),
-                                                    nb_rows=4, nb_cols=4)
+        mask = iaa.CheckerboardMaskGen.generate_mask((15, 15),
+                                                     nb_rows=4, nb_cols=4)
         expected = np.full((12, 12), 0.0, dtype=np.float32)
 
         expected[0:3, 0:3] = 1.0
@@ -2801,16 +2801,16 @@ class TestRegularGridMaskGen(unittest.TestCase):
         assert np.allclose(mask, expected)
 
     def test_generate_mask_with_more_columns_than_pixels(self):
-        mask = iaa.RegularGridMaskGen.generate_mask((5, 4),
-                                                    nb_rows=1, nb_cols=10)
+        mask = iaa.CheckerboardMaskGen.generate_mask((5, 4),
+                                                     nb_rows=1, nb_cols=10)
         expected = np.full((5, 4), 1.0, dtype=np.float32)
         expected[:, 1:2] = 0.0
         expected[:, 3:4] = 0.0
         assert np.allclose(mask, expected)
 
     def test_generate_mask_with_more_rows_than_pixels(self):
-        mask = iaa.RegularGridMaskGen.generate_mask((4, 5),
-                                                    nb_rows=6, nb_cols=1)
+        mask = iaa.CheckerboardMaskGen.generate_mask((4, 5),
+                                                     nb_rows=6, nb_cols=1)
         expected = np.full((4, 5), 1.0, dtype=np.float32)
         expected[1:2, :] = 0.0
         expected[3:4, :] = 0.0
@@ -2833,7 +2833,7 @@ class TestRegularGridMaskGen(unittest.TestCase):
             with self.subTest(shape=shape):
                 image = np.zeros(shape, dtype=np.uint8)
                 batch = ia.BatchInAugmentation(images=[image])
-                gen = iaa.RegularGridMaskGen(2, 2)
+                gen = iaa.CheckerboardMaskGen(2, 2)
 
                 mask = gen.draw_masks(batch)[0]
 
@@ -2844,7 +2844,7 @@ class TestRegularGridMaskGen(unittest.TestCase):
         hms = ia.HeatmapsOnImage(np.zeros((5, 5), dtype=np.float32),
                                  shape=(6, 8, 3))
         batch = ia.BatchInAugmentation(heatmaps=[hms])
-        gen = iaa.RegularGridMaskGen(nb_rows=3, nb_cols=2)
+        gen = iaa.CheckerboardMaskGen(nb_rows=3, nb_cols=2)
         mask = gen.draw_masks(batch, random_state=1)[0]
 
         expected = np.full((6, 8), 1.0, dtype=np.float32)

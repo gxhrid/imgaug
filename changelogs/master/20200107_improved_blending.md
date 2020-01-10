@@ -13,7 +13,7 @@
   gradient mask generator for `BlendAlphaMask`.
 * Added `imgaug.augmenters.blend.VerticalLinearGradientMaskGen`, a linear
   gradient mask generator for `BlendAlphaMask`.
-* Added `imgaug.augmenters.blend.RegularGridMaskGen`, a checkerboard-like
+* Added `imgaug.augmenters.blend.CheckerboardMaskGen`, a checkerboard-like
   mask generator for `BlendAlphaMask`.
 * Added `imgaug.augmenters.blend.SegMapClassIdsMaskGen`, a segmentation
   map-based mask generator for `BlendAlphaMask`.
@@ -39,7 +39,7 @@
 * Added `imgaug.augmenters.blend.BlendAlphaSomeColors`.
 * Added `imgaug.augmenters.blend.BlendAlphaHorizontalLinearGradient`.
 * Added `imgaug.augmenters.blend.BlendAlphaVerticalLinearGradient`.
-* Added `imgaug.augmenters.blend.BlendAlphaRegularGrid`.
+* Added `imgaug.augmenters.blend.BlendAlphaCheckerboard`.
 * Added `imgaug.augmenters.blend.BlendAlphaSegMapClassIds`.
 * Added `imgaug.augmenters.blend.BlendAlphaBoundingBoxes`.
 * Changed `imgaug.parameters.handle_categorical_string_param()` to allow

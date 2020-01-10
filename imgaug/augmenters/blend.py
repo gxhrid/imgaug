@@ -1956,17 +1956,18 @@ class BlendAlphaBoundingBoxes(BlendAlphaMask):
         )
 
 
-class BlendAlphaRegularGrid(BlendAlphaMask):
-    """Blend images from two branches according to a regular grid.
+class BlendAlphaCheckerboard(BlendAlphaMask):
+    """Blend images from two branches according to a checkerboard pattern.
 
-    This class generates for each image a mask following a regular grid of
+    This class generates for each image a mask following a checkboard layout of
     ``H`` rows and ``W`` columns. Each column is then filled with either
     ``1.0`` or ``0.0``. The cell at the top-left is always ``1.0``. Its right
-    and bottom neighbour cells are ``0.0``.
+    and bottom neighbour cells are ``0.0``. The 4-neighbours of any cell always
+    have a value opposite to the cell's value (``0.0`` vs. ``1.0``).
 
     This class is a thin wrapper around
     :class:`imgaug.augmenters.blend.BlendAlphaMask` together with
-    :class:`imgaug.augmenters.blend.RegularGridMaskGen`.
+    :class:`imgaug.augmenters.blend.CheckerboardMaskGen`.
 
     .. note::
 
@@ -1982,11 +1983,11 @@ class BlendAlphaRegularGrid(BlendAlphaMask):
     ----------
     nb_rows : int or tuple of int or list of int or imgaug.parameters.StochasticParameter, optional
         Number of rows of the checkerboard.
-        See :class:`imgaug.augmenters.blend.RegularGridMaskGen` for details.
+        See :class:`imgaug.augmenters.blend.CheckerboardMaskGen` for details.
 
     nb_cols : int or tuple of int or list of int or imgaug.parameters.StochasticParameter, optional
         Number of columns of the checkerboard. Analogous to `nb_rows`.
-        See :class:`imgaug.augmenters.blend.RegularGridMaskGen` for details.
+        See :class:`imgaug.augmenters.blend.CheckerboardMaskGen` for details.
 
     foreground : None or imgaug.augmenters.meta.Augmenter or iterable of imgaug.augmenters.meta.Augmenter, optional
         Augmenter(s) that make up the foreground branch.
@@ -2020,12 +2021,12 @@ class BlendAlphaRegularGrid(BlendAlphaMask):
     Examples
     --------
     >>> import imgaug.augmenters as iaa
-    >>> aug = iaa.BlendAlphaRegularGrid(nb_rows=2, nb_cols=(1, 4),
-    >>>                                 foreground=iaa.Grayscale(1.0))
+    >>> aug = iaa.BlendAlphaCheckerboard(nb_rows=2, nb_cols=(1, 4),
+    >>>                                  foreground=iaa.Grayscale(1.0))
 
     Create an augmenter that places a ``HxW`` grid on each image, where
     ``H`` (rows) is always ``2`` and ``W`` is randomly and uniformly sampled
-    from the interval ``[1, 4]``. Half of the cells in that grid are
+    from the interval ``[1, 4]``. Half of the cells in the grid are
     grayscaled, the other half is unaltered.
 
     """
@@ -2033,8 +2034,8 @@ class BlendAlphaRegularGrid(BlendAlphaMask):
     def __init__(self, nb_rows, nb_cols,
                  foreground=None, background=None,
                  name=None, deterministic=False, random_state=None):
-        super(BlendAlphaRegularGrid, self).__init__(
-            RegularGridMaskGen(
+        super(BlendAlphaCheckerboard, self).__init__(
+            CheckerboardMaskGen(
                 nb_rows=nb_rows,
                 nb_cols=nb_cols
             ),
@@ -2728,13 +2729,14 @@ class VerticalLinearGradientMaskGen(_LinearGradientMaskGen):
             end_at=end_at)
 
 
-class RegularGridMaskGen(IBatchwiseMaskGenerator):
+class CheckerboardMaskGen(IBatchwiseMaskGenerator):
     """Generate masks following a checkerboard-like pattern.
 
-    This mask generator splits each image into a regular grid of ``H`` rows
-    and ``W`` columns. Each column is then filled with either ``1.0`` or
-    ``0.0``. The cell at the top-left is always ``1.0``. Its right and bottom
-    neighbour cells are ``0.0``.
+    This mask generator splits each image into a checkerboard pattern of
+    ``H`` rows and ``W`` columns. Each column is then filled with either
+    ``1.0`` or ``0.0``. The cell at the top-left is always ``1.0``. Its right
+    and bottom neighbour cells are ``0.0``. The 4-neighbours of any cell always
+    have a value opposite to the cell's value (``0.0`` vs. ``1.0``).
 
     Parameters
     ----------
