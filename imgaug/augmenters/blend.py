@@ -32,6 +32,15 @@ from .. import random as iarandom
 from ..augmentables import utils as augm_utils
 
 
+def _split_1d_array_to_list(arr, sizes):
+    result = []
+    i = 0
+    for size in sizes:
+        result.append(arr[i:i+size])
+        i += size
+    return result
+
+
 def blend_alpha(image_fg, image_bg, alpha, eps=1e-2):
     """
     Blend two images using an alpha blending.
@@ -1960,7 +1969,7 @@ class BlendAlphaCheckerboard(BlendAlphaMask):
     """Blend images from two branches according to a checkerboard pattern.
 
     This class generates for each image a mask following a checkboard layout of
-    ``H`` rows and ``W`` columns. Each column is then filled with either
+    ``H`` rows and ``W`` columns. Each cell is then filled with either
     ``1.0`` or ``0.0``. The cell at the top-left is always ``1.0``. Its right
     and bottom neighbour cells are ``0.0``. The 4-neighbours of any cell always
     have a value opposite to the cell's value (``0.0`` vs. ``1.0``).
@@ -1981,11 +1990,11 @@ class BlendAlphaCheckerboard(BlendAlphaMask):
 
     Parameters
     ----------
-    nb_rows : int or tuple of int or list of int or imgaug.parameters.StochasticParameter, optional
+    nb_rows : int or tuple of int or list of int or imgaug.parameters.StochasticParameter
         Number of rows of the checkerboard.
         See :class:`imgaug.augmenters.blend.CheckerboardMaskGen` for details.
 
-    nb_cols : int or tuple of int or list of int or imgaug.parameters.StochasticParameter, optional
+    nb_cols : int or tuple of int or list of int or imgaug.parameters.StochasticParameter
         Number of columns of the checkerboard. Analogous to `nb_rows`.
         See :class:`imgaug.augmenters.blend.CheckerboardMaskGen` for details.
 
@@ -2320,11 +2329,7 @@ class SomeColorsMaskGen(IBatchwiseMaskGenerator):
             np.round(rotation_deg * (256/360)).astype(np.int32),
             256)
 
-        binwise_alphas = []
-        nth_bin = 0
-        for nb_bins_i in nb_bins:
-            binwise_alphas.append(alpha[nth_bin:nth_bin+nb_bins_i])
-            nth_bin += nb_bins_i
+        binwise_alphas = _split_1d_array_to_list(alpha, nb_bins)
 
         return binwise_alphas, smoothness, rotation_bins
 
@@ -2729,11 +2734,157 @@ class VerticalLinearGradientMaskGen(_LinearGradientMaskGen):
             end_at=end_at)
 
 
+class RegularGridMaskGen(IBatchwiseMaskGenerator):
+    """Generate masks following a regular grid pattern.
+
+    This mask generator splits each image into a checkerboard pattern of
+    ``H`` rows and ``W`` columns. Each cell is then filled with an alpha
+    value, sampled randomly per cell.
+
+    The difference to :class:`CheckerboardMaskGen` is that this mask generator
+    samples random alpha values per cell, while in the checkerboard the
+    alpha values follow a fixed pattern.
+
+    Parameters
+    ----------
+    nb_rows : int or tuple of int or list of int or imgaug.parameters.StochasticParameter
+        Number of rows of the regular grid.
+
+            * If ``int``: Exactly that value will be used for all images.
+            * If ``tuple`` ``(a, b)``: A random value will be uniformly sampled
+              per image from the discrete interval ``[a..b]``.
+            * If ``list``: A random value will be picked per image from that
+              list.
+            * If ``StochasticParameter``: That parameter will be queried once
+              per batch for ``(N,)`` values -- one per image.
+
+    nb_cols : int or tuple of int or list of int or imgaug.parameters.StochasticParameter
+        Number of columns of the checkerboard. Analogous to `nb_rows`.
+
+    alpha : number or tuple of number or list of number or imgaug.parameters.StochasticParameter, optional
+        Alpha value of each cell.
+
+        * If ``number``: Exactly that value will be used for all images.
+        * If ``tuple`` ``(a, b)``: A random value will be uniformly sampled
+          per image from the interval ``[a, b]``.
+        * If ``list``: A random value will be picked per image from that list.
+        * If ``StochasticParameter``: That parameter will be queried once
+          per batch for ``(N,)`` values -- one per image.
+
+    """
+
+    def __init__(self, nb_rows, nb_cols, alpha=[0.0, 1.0]):
+        self.nb_rows = iap.handle_discrete_param(
+            nb_rows, "nb_rows", value_range=(1, None),
+            tuple_to_uniform=True, list_to_choice=True,
+            allow_floats=False)
+        self.nb_cols = iap.handle_discrete_param(
+            nb_cols, "nb_cols", value_range=(1, None),
+            tuple_to_uniform=True, list_to_choice=True,
+            allow_floats=False)
+        self.alpha = iap.handle_continuous_param(
+            alpha, "alpha", value_range=(0.0, 1.0),
+            tuple_to_uniform=True, list_to_choice=True)
+
+    def draw_masks(self, batch, random_state=None):
+        """
+        See :func:`imgaug.augmenters.blend.IBatchwiseMaskGenerator.draw_masks`.
+
+        """
+        random_state = iarandom.RNG(random_state)
+        shapes = batch.get_rowwise_shapes()
+        nb_rows, nb_cols, alpha = self._draw_samples(batch.nb_rows,
+                                                     random_state=random_state)
+
+        return [self.generate_mask(shape, nb_rows_i, nb_cols_i, alpha_i)
+                for shape, nb_rows_i, nb_cols_i, alpha_i
+                in zip(shapes, nb_rows, nb_cols, alpha)]
+
+    def _draw_samples(self, nb_images, random_state):
+        nb_rows = self.nb_rows.draw_samples((nb_images,),
+                                            random_state=random_state)
+        nb_cols = self.nb_cols.draw_samples((nb_images,),
+                                            random_state=random_state)
+        nb_alphas_per_img = nb_rows * nb_cols
+        alpha_raw = self.alpha.draw_samples(
+            (np.sum(nb_alphas_per_img),),
+            random_state=random_state)
+
+        alpha = _split_1d_array_to_list(alpha_raw, nb_alphas_per_img)
+
+        return nb_rows, nb_cols, alpha
+
+    @classmethod
+    def generate_mask(cls, shape, nb_rows, nb_cols, alphas):
+        """Generate a mask following a checkerboard pattern.
+
+        Parameters
+        ----------
+        shape : tuple of int
+            Height and width of the output mask.
+
+        nb_rows : int
+            Number of rows of the checkerboard pattern.
+
+        nb_cols : int
+            Number of columns of the checkerboard pattern.
+
+        alphas : ndarray
+            1D or 2D array containing for each cell the alpha value, i.e.
+            ``nb_rows*nb_cols`` values.
+
+        Returns
+        -------
+        ndarray
+            ``float32`` mask array with same height and width as
+            ``segmap.shape``. Values are in ``[0.0, 1.0]``.
+
+        """
+        from . import size as sizelib
+
+        height, width = shape[0:2]
+        if 0 in (height, width):
+            return np.zeros((height, width), dtype=np.float32)
+
+        nb_rows = min(max(nb_rows, 1), height)
+        nb_cols = min(max(nb_cols, 1), width)
+
+        cell_height = int(height / nb_rows)
+        cell_width = int(width / nb_cols)
+
+        # If there are more alpha values than nb_rows*nb_cols we reduce the
+        # number of alpha values.
+        alphas = alphas.flat[0:nb_rows*nb_cols]
+        assert alphas.size == nb_rows*nb_cols, (
+            "Expected `alphas` to not contain less values than "
+            "`nb_rows * nb_cols` (both clipped to [1, height] and "
+            "[1, width] respectively). Got %d alpha values vs %d expected "
+            "values (nb_rows=%d, nb_cols=%d) for requested mask shape %s." % (
+                alphas.size, nb_rows * nb_cols, nb_rows, nb_cols,
+                (height, width)))
+        mask = np.float32(alphas).reshape((nb_rows, nb_cols))
+        mask = np.repeat(mask, cell_height, axis=0)
+        mask = np.repeat(mask, cell_width, axis=1)
+
+        # if mask is too small, reflection pad it on all sides
+        missing_height = height - mask.shape[0]
+        missing_width = width - mask.shape[1]
+        top = int(np.floor(missing_height / 2))
+        bottom = int(np.ceil(missing_height / 2))
+        left = int(np.floor(missing_width / 2))
+        right = int(np.ceil(missing_width / 2))
+        mask = sizelib.pad(mask,
+                           top=top, right=right, bottom=bottom, left=left,
+                           mode="reflect")
+
+        return mask
+
+
 class CheckerboardMaskGen(IBatchwiseMaskGenerator):
     """Generate masks following a checkerboard-like pattern.
 
-    This mask generator splits each image into a checkerboard pattern of
-    ``H`` rows and ``W`` columns. Each column is then filled with either
+    This mask generator splits each image into a regular grid of
+    ``H`` rows and ``W`` columns. Each cell is then filled with either
     ``1.0`` or ``0.0``. The cell at the top-left is always ``1.0``. Its right
     and bottom neighbour cells are ``0.0``. The 4-neighbours of any cell always
     have a value opposite to the cell's value (``0.0`` vs. ``1.0``).
@@ -2971,13 +3122,7 @@ class SegMapClassIdsMaskGen(IBatchwiseMaskGenerator):
             (np.sum(nb_sample_classes),),
             random_state=random_state)
 
-        class_ids = []
-        ith_class_id = 0
-        for nb_sample_classes_i in nb_sample_classes:
-            start = ith_class_id
-            end = start + nb_sample_classes_i
-            class_ids.append(class_ids_raw[start:end])
-            ith_class_id += nb_sample_classes_i
+        class_ids = _split_1d_array_to_list(class_ids_raw, nb_sample_classes)
 
         return class_ids
 
@@ -3137,13 +3282,7 @@ class BoundingBoxesMaskGen(IBatchwiseMaskGenerator):
             (np.sum(nb_sample_labels),),
             random_state=random_state)
 
-        labels = []
-        ith_entry = 0
-        for nb_sample_labels_i in nb_sample_labels:
-            start = ith_entry
-            end = start + nb_sample_labels_i
-            labels.append(labels_raw[start:end])
-            ith_entry += nb_sample_labels_i
+        labels = _split_1d_array_to_list(labels_raw, nb_sample_labels)
 
         return labels
 
