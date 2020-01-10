@@ -36,5 +36,7 @@
 * Added `imgaug.augmenters.blend.BlendAlphaHorizontalLinearGradient`.
 * Added `imgaug.augmenters.blend.BlendAlphaVerticalLinearGradient`.
 * Added `imgaug.augmenters.blend.BlendAlphaSegMapClassIds`.
+* Changed `imgaug.parameters.handle_categorical_string_param()` to allow
+  parameter `valid_values` to be `None`.
 * Fixed a wrong error message in
   `imgaug.augmenters.color.change_colorspace_()`.

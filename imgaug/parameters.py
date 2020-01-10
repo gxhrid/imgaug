@@ -156,14 +156,15 @@ def handle_discrete_param(param, name, value_range=None, tuple_to_uniform=True,
             allowed_type, allowed_type, list_str, name, type(param),))
 
 
-def handle_categorical_string_param(param, name, valid_values):
-    if param == ia.ALL:
+def handle_categorical_string_param(param, name, valid_values=None):
+    if param == ia.ALL and valid_values is not None:
         return Choice(list(valid_values))
 
     if ia.is_string(param):
-        assert param in valid_values, (
-            "Expected parameter '%s' to be one of: %s. Got: %s." % (
-                name, ", ".join(list(valid_values)), param))
+        if valid_values is not None:
+            assert param in valid_values, (
+                "Expected parameter '%s' to be one of: %s. Got: %s." % (
+                    name, ", ".join(list(valid_values)), param))
         return Deterministic(param)
 
     if isinstance(param, list):
@@ -171,20 +172,23 @@ def handle_categorical_string_param(param, name, valid_values):
             "Expected list provided for parameter '%s' to only contain "
             "strings, got types: %s." % (
                 name, ", ".join([type(v).__name__ for v in param])))
-        assert all([val in valid_values for val in param]), (
-            "Expected list provided for parameter '%s' to only contain "
-            "the following allowed strings: %s. Got strings: %s." % (
-                name, ", ".join(valid_values), ", ".join(param)
-            ))
+        if valid_values is not None:
+            assert all([val in valid_values for val in param]), (
+                "Expected list provided for parameter '%s' to only contain "
+                "the following allowed strings: %s. Got strings: %s." % (
+                    name, ", ".join(valid_values), ", ".join(param)
+                ))
         return Choice(param)
 
     if isinstance(param, StochasticParameter):
         return param
 
     raise Exception(
-        "Expected parameter '%s' to be imgaug.ALL, a string, a list of "
+        "Expected parameter '%s' to be%s a string, a list of "
         "strings or StochasticParameter, got %s." % (
-            name, type(param).__name__,))
+            name,
+            " imgaug.ALL," if valid_values is not None else "",
+            type(param).__name__,))
 
 
 def handle_discrete_kernel_size_param(param, name, value_range=(1, None),
