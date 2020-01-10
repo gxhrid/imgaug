@@ -2640,6 +2640,26 @@ class SegMapClassIdsMaskGen(IBatchwiseMaskGenerator):
     #      segmap.keep_only_classes(class_ids).draw_mask()
     @classmethod
     def generate_mask(cls, segmap, class_ids):
+        """Generate a mask of where the segmentation map has the given classes.
+
+        Parameters
+        ----------
+        segmap : imgaug.augmentables.segmap.SegmentationMapsOnImage
+            The segmentation map for which to generate the mask.
+
+        class_ids : iterable of int
+            IDs of the classes to set to ``1.0``.
+            For an ``(x, y)`` position, it is enough that *any* channel
+            at the given location to have one of these class ids to be marked
+            as ``1.0``.
+
+        Returns
+        -------
+        ndarray
+            ``float32`` mask array with same height and width as
+            ``segmap.shape``. Values are in ``[0.0, 1.0]``.
+
+        """
         mask = np.zeros(segmap.arr.shape[0:2], dtype=bool)
 
         for class_id in class_ids:
