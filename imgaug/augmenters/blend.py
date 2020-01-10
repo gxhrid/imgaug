@@ -12,6 +12,7 @@ List of augmenters:
     * BlendAlphaHorizontalLinearGradient
     * BlendAlphaVerticalLinearGradient
     * BlendAlphaSegMapClassIds
+    * BlendAlphaBoundingBoxes
 
 """
 from __future__ import print_function, division, absolute_import
@@ -671,6 +672,14 @@ class BlendAlphaMask(meta.Augmenter):
         coords = coords.to_xy_array()
         coords_fg = coords_fg.to_xy_array()
         coords_bg = coords_bg.to_xy_array()
+
+        assert coords.shape == coords_fg.shape == coords_bg.shape, (
+            "Expected number of coordinates to not be changed by foreground "
+            "or background branch in BlendAlphaMask. But input coordinates "
+            "of shape %s were changed to %s (foreground) and %s "
+            "(background). Make sure to not use any augmenters that affect "
+            "the existence of coordinates." % (
+                coords.shape, coords_fg.shape, coords_bg.shape))
 
         h_img, w_img = mask_image.shape[0:2]
 
@@ -1818,6 +1827,128 @@ class BlendAlphaSegMapClassIds(BlendAlphaMask):
             SegMapClassIdsMaskGen(
                 class_ids=class_ids,
                 nb_sample_classes=nb_sample_classes
+            ),
+            foreground=foreground,
+            background=background,
+            name=name,
+            deterministic=deterministic,
+            random_state=random_state
+        )
+
+
+class BlendAlphaBoundingBoxes(BlendAlphaMask):
+    """Blend images from two branches based on areas enclosed in bounding boxes.
+
+    This class generates masks that are ``1.0`` within bounding boxes of given
+    labels. A mask pixel will be set to ``1.0`` if *at least* one bounding box
+    covers the area and has one of the requested labels.
+
+    This class is a thin wrapper around
+    :class:`imgaug.augmenters.blend.BlendAlphaMask` together with
+    :class:`imgaug.augmenters.blend.BoundingBoxesMaskGen`.
+
+    .. note::
+
+        Avoid using augmenters as children that affect pixel locations (e.g.
+        horizontal flips). See
+        :class:`imgaug.augmenters.blend.BlendAlphaMask` for details.
+
+    .. note::
+
+        This class will produce an ``AssertionError`` if there are no
+        bounding boxes in a batch.
+
+    dtype support::
+
+        See :class:`imgaug.augmenters.blend.BlendAlphaMask`.
+
+    Parameters
+    ----------
+    labels : None or str or list of str or imgaug.parameters.StochasticParameter
+        See :class:`imgaug.augmenters.blend.BoundingBoxesMaskGen`.
+
+    foreground : None or imgaug.augmenters.meta.Augmenter or iterable of imgaug.augmenters.meta.Augmenter, optional
+        Augmenter(s) that make up the foreground branch.
+        High alpha values will show this branch's results.
+
+            * If ``None``, then the input images will be reused as the output
+              of the foreground branch.
+            * If ``Augmenter``, then that augmenter will be used as the branch.
+            * If iterable of ``Augmenter``, then that iterable will be
+              converted into a ``Sequential`` and used as the augmenter.
+
+    background : None or imgaug.augmenters.meta.Augmenter or iterable of imgaug.augmenters.meta.Augmenter, optional
+        Augmenter(s) that make up the background branch.
+        Low alpha values will show this branch's results.
+
+            * If ``None``, then the input images will be reused as the output
+              of the background branch.
+            * If ``Augmenter``, then that augmenter will be used as the branch.
+            * If iterable of ``Augmenter``, then that iterable will be
+              converted into a ``Sequential`` and used as the augmenter.
+
+    nb_sample_labels : None or tuple of int or list of int or imgaug.parameters.StochasticParameter, optional
+        See :class:`imgaug.augmenters.blend.BoundingBoxesMaskGen`.
+
+    name : None or str, optional
+        See :func:`imgaug.augmenters.meta.Augmenter.__init__`.
+
+    deterministic : bool, optional
+        See :func:`imgaug.augmenters.meta.Augmenter.__init__`.
+
+    random_state : None or int or imgaug.random.RNG or numpy.random.Generator or numpy.random.BitGenerator or numpy.random.SeedSequence or numpy.random.RandomState, optional
+        See :func:`imgaug.augmenters.meta.Augmenter.__init__`.
+
+    Examples
+    --------
+    >>> import imgaug.augmenters as iaa
+    >>> aug = iaa.BlendAlphaBoundingBoxes("person",
+    >>>                                   foreground=iaa.Grayscale(1.0))
+
+    Create an augmenter that removes color within bounding boxes having the
+    label ``person``.
+
+    >>> import imgaug.augmenters as iaa
+    >>> aug = iaa.BlendAlphaBoundingBoxes(["person", "car"],
+    >>>                                   foreground=iaa.AddToHue((-255, 255)))
+
+    Create an augmenter that randomizes the hue within bounding boxes that
+    have the label ``person`` or ``car``.
+
+    >>> import imgaug.augmenters as iaa
+    >>> aug = iaa.BlendAlphaBoundingBoxes(["person", "car"],
+    >>>                                   foreground=iaa.AddToHue((-255, 255)),
+    >>>                                   nb_sample_classes=1)
+
+    Create an augmenter that randomizes the hue within bounding boxes that
+    have either the label ``person`` or ``car``. Only one label is picked per
+    image. Note that the sampling happens with replacement, so if
+    ``nb_sample_classes`` would be ``>1``, it could still lead to only one
+    *unique* label being sampled.
+
+    >>> import imgaug.augmenters as iaa
+    >>> aug = iaa.BlendAlphaBoundingBoxes(None,
+    >>>                                   background=iaa.Multiply(0.0))
+
+    Create an augmenter that zeros all pixels (``Multiply(0.0)``)
+    that are *not* (``background`` branch) within bounding boxes of
+    *any* (``None``) label. In other words, all pixels outside of bounding
+    boxes become black.
+    Note that we don't use ``TotalDropout`` here, because by default it will
+    also remove all coordinate-based augmentables, which will break the
+    blending of such inputs.
+
+    """
+
+    def __init__(self,
+                 labels,
+                 foreground=None, background=None,
+                 nb_sample_labels=None,
+                 name=None, deterministic=False, random_state=None):
+        super(BlendAlphaBoundingBoxes, self).__init__(
+            BoundingBoxesMaskGen(
+                labels=labels,
+                nb_sample_labels=nb_sample_labels
             ),
             foreground=foreground,
             background=background,

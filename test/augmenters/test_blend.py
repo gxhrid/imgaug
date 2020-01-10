@@ -1967,7 +1967,7 @@ class TestBlendAlphaSegMapClassIds(unittest.TestCase):
 
         for shape in shapes:
             with self.subTest(shape=shape):
-                image = np.full(shape, 0, dtype=np.uint8)
+                image = np.full(shape, 255, dtype=np.uint8)
                 segmap_arr = np.zeros((2, 2, 1), dtype=np.int32)
                 segmap_arr[0, 0] = 2
                 aug = iaa.BlendAlphaSegMapClassIds(
@@ -2004,6 +2004,94 @@ class TestBlendAlphaSegMapClassIds(unittest.TestCase):
                 image=image, segmentation_maps=[segmap_arr])
             assert np.array_equal(image_aug, image_aug_pkl)
             assert np.array_equal(sm_aug, sm_aug_pkl)
+
+
+class TestBlendAlphaBoundingBoxes(unittest.TestCase):
+    def setUp(self):
+        reseed()
+
+    def test___init__(self):
+        child1 = iaa.Sequential([])
+        child2 = iaa.Sequential([])
+        aug = iaa.BlendAlphaBoundingBoxes(
+            "person",
+            nb_sample_labels=1,
+            foreground=child1,
+            background=child2
+        )
+        assert aug.foreground is child1
+        assert aug.background is child2
+        assert isinstance(aug.mask_generator,
+                          iaa.BoundingBoxesMaskGen)
+        assert aug.mask_generator.labels.value == "person"
+        assert aug.mask_generator.nb_sample_labels.value == 1
+
+    def test_single_image(self):
+        image = np.full((10, 10, 3), 255, dtype=np.uint8)
+        bbs = [ia.BoundingBox(x1=1, y1=1, x2=5, y2=5, label="bb1"),
+               ia.BoundingBox(x1=-3, y1=4, x2=20, y2=8, label="bb2")]
+
+        aug = iaa.BlendAlphaBoundingBoxes(
+            ["bb1"],
+            nb_sample_labels=1,
+            foreground=iaa.Multiply(0.0)
+        )
+
+        image_aug, segmap_aug = aug(image=image,
+                                    bounding_boxes=[bbs])
+
+        assert np.allclose(image_aug[1:5, 1:5, :], 0, rtol=0, atol=1.01)
+        assert np.allclose(image_aug[0:1, 0:1, :], 255, rtol=0, atol=1.01)
+        assert np.allclose(image_aug[5:10, 5:10, :], 255, rtol=0, atol=1.01)
+
+    def test_zero_sized_axes(self):
+        shapes = [
+            (0, 0),
+            (0, 1),
+            (1, 0),
+            (0, 1, 0),
+            (1, 0, 0),
+            (0, 1, 1),
+            (1, 0, 1)
+        ]
+
+        for shape in shapes:
+            with self.subTest(shape=shape):
+                image = np.full(shape, 255, dtype=np.uint8)
+                bbs = [ia.BoundingBox(x1=1, y1=1, x2=5, y2=5, label="bb1"),
+                       ia.BoundingBox(x1=-3, y1=4, x2=20, y2=8, label="bb2")]
+                aug = iaa.BlendAlphaBoundingBoxes(
+                    ["bb1"],
+                    foreground=iaa.Multiply(0.0))
+
+                image_aug, segmap_aug = aug(
+                    image=image, bounding_boxes=[bbs])
+
+                assert image_aug.dtype.name == "uint8"
+                assert image_aug.shape == shape
+
+    def test_pickleable(self):
+        shape = (15, 15, 3)
+        iterations = 3
+        augmenter = iaa.BlendAlphaBoundingBoxes(
+            ["bb1", "bb2", "bb3"],
+            foreground=iaa.Add((1, 10), random_state=1),
+            background=iaa.Add((11, 20), random_state=2),
+            nb_sample_labels=1,
+            random_state=3)
+        image = np.mod(np.arange(int(np.prod(shape))), 256).astype(np.uint8)
+        image = image.reshape(shape)
+        bbs = [ia.BoundingBox(x1=1, y1=1, x2=5, y2=5, label="bb1"),
+               ia.BoundingBox(x1=-3, y1=4, x2=20, y2=8, label="bb2")]
+
+        augmenter_pkl = pickle.loads(pickle.dumps(augmenter, protocol=-1))
+
+        for _ in np.arange(iterations):
+            image_aug, bbs_aug = augmenter(
+                image=image, bounding_boxes=[bbs])
+            image_aug_pkl, bbs_aug_pkl = augmenter_pkl(
+                image=image, bounding_boxes=[bbs])
+            assert np.array_equal(image_aug, image_aug_pkl)
 
 
 class TestStochasticParameterMaskGen(unittest.TestCase):
