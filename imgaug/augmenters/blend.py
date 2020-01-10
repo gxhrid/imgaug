@@ -2561,14 +2561,14 @@ class SegMapClassIdsMaskGen(IBatchwiseMaskGenerator):
         sampled.
 
             * If ``None``: `class_ids` is expected to be a fixed value of
-              class ids to be used for all segmentation maps without sampling.
+              class ids to be used for all segmentation maps.
             * If ``int``: Exactly that many class ids will be sampled for all
               segmentation maps.
             * If ``tuple`` ``(a, b)``: A random value will be uniformly
               sampled per segmentation map from the discrete interval
               ``[a..b]``.
-            * If ``list``: A random value will be picked per segmentation
-              map from that list.
+            * If ``list`` or ``int``: A random value will be picked per
+              segmentation map from that list.
             * If ``StochasticParameter``: That parameter will be queried once
               per batch for ``(B,)`` values, where ``B`` is the number of
               segmentation maps.
