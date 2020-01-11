@@ -25,7 +25,6 @@ import cv2
 
 import imgaug as ia
 from . import meta
-from . import color as colorlib
 from .. import parameters as iap
 from .. import dtypes as iadt
 from .. import random as iarandom
@@ -2487,6 +2486,9 @@ class SomeColorsMaskGen(IBatchwiseMaskGenerator):
             ``[0.0, 1.0]``
 
         """
+        # import has to be deferred, otherwise python 2.7 fails
+        from . import color as colorlib
+
         image_hsv = colorlib.change_colorspace_(
             np.copy(image),
             to_colorspace=colorlib.CSPACE_HSV,
