@@ -2421,7 +2421,7 @@ class SomeColorsMaskGen(IBatchwiseMaskGenerator):
                 in enumerate(batch.images)]
 
     def _draw_mask(self, image, image_idx, samples):
-        return self.generate_mask_from_image(
+        return self.generate_mask(
             image,
             samples[0][image_idx],
             samples[1][image_idx] * self.sigma_max,
@@ -2451,8 +2451,8 @@ class SomeColorsMaskGen(IBatchwiseMaskGenerator):
         return binwise_alphas, smoothness, rotation_bins
 
     @classmethod
-    def generate_mask_from_image(cls, image, binwise_alphas, sigma,
-                                 rotation_bins, from_colorspace):
+    def generate_mask(cls, image, binwise_alphas, sigma,
+                      rotation_bins, from_colorspace):
         """Generate a colorwise alpha mask for a single image.
 
         Parameters
