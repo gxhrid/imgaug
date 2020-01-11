@@ -1925,7 +1925,7 @@ class BlendAlphaBoundingBoxes(BlendAlphaMask):
     >>> import imgaug.augmenters as iaa
     >>> aug = iaa.BlendAlphaBoundingBoxes(["person", "car"],
     >>>                                   foreground=iaa.AddToHue((-255, 255)),
-    >>>                                   nb_sample_classes=1)
+    >>>                                   nb_sample_labels=1)
 
     Create an augmenter that randomizes the hue within bounding boxes that
     have either the label ``person`` or ``car``. Only one label is picked per
