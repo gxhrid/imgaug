@@ -3098,6 +3098,7 @@ class FrequencyNoise(StochasticParameter):
         return np.stack(channels, axis=-1)
 
     def _draw_samples_hw(self, height, width, random_state):
+        rngs = random_state.duplicate(5)
         maxlen = max(height, width)
         size_px_max = self.size_px_max.draw_sample(random_state=rngs[0])
         if maxlen > size_px_max:
@@ -3147,13 +3148,13 @@ class FrequencyNoise(StochasticParameter):
 
         # upscale from low resolution to image size
         upscale_method = self.upscale_method.draw_sample(random_state=rngs[4])
-        if noise_0to1.shape != (size[0], size[1]):
+        if noise_0to1.shape != (height, width):
             noise_0to1_uint8 = (noise_0to1 * 255).astype(np.uint8)
             noise_0to1_3d = np.tile(
                 noise_0to1_uint8[..., np.newaxis], (1, 1, 3))
             noise_0to1 = ia.imresize_single_image(
                 noise_0to1_3d,
-                (size[0], size[1]),
+                (height, width),
                 interpolation=upscale_method)
             noise_0to1 = (noise_0to1[..., 0] / 255.0).astype(np.float32)
 
